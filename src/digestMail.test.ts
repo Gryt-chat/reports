@@ -29,15 +29,26 @@ test("and both when they do not", () => {
   assert.equal(range("2026-07-29T09:00:00Z", "2026-08-05T09:00:00Z"), "29 July – 5 August 2026");
 });
 
-test("movement is a signed delta, and says which way", () => {
+test("movement counts what arrived, and says which way", () => {
   assert.deepEqual(movement(4, 1), { label: "+3", up: true });
-  assert.deepEqual(movement(1, 4), { label: "\u22123", up: false });
   assert.deepEqual(movement(2, 2), { label: "same as last week", up: false });
 });
 
-test("a drop uses a minus sign, not a hyphen", () => {
-  // U+2212. A hyphen is a word-break character and clients treat it as one.
-  assert.match(movement(1, 4).label, /^\u2212/);
+test("a quieter week is never a negative number", () => {
+  // "−2" reads as two of something lost. Nothing was lost; two fewer people
+  // wrote in. The badge says how much arrived, so it states last week instead.
+  assert.deepEqual(movement(1, 4), { label: "4 last week", up: false });
+  assert.deepEqual(movement(0, 3), { label: "3 last week", up: false });
+});
+
+test("no rendering of a week carries a minus sign", () => {
+  const down = render(week({ bug: 1, previousBug: 9, feedback: 0, previousFeedback: 6 }), null);
+  for (const part of [down.html, down.text, down.subject]) {
+    assert.doesNotMatch(part, /[\u2212]/);
+    // A hyphen in front of a digit would read the same way to somebody
+    // skimming, whatever character it is.
+    assert.doesNotMatch(part, /(^|\s)-\d/);
+  }
 });
 
 test("a fall is not coloured like a failure", () => {
