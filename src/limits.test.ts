@@ -131,3 +131,29 @@ test("a forwarded address is only believed when the proxy is the one asking", ()
 
   assert.equal(clientIp(fromProxy, false, []), "::ffff:203.0.113.7", "off means off");
 });
+
+test("it names the address it believed, once, and only when a header was sent", () => {
+  const named: string[] = [];
+  const withHeader = {
+    socket: { remoteAddress: "::ffff:203.0.113.7" },
+    headers: { "cf-connecting-ip": "1.2.3.4" },
+  } as unknown as IncomingMessage;
+  const without = {
+    socket: { remoteAddress: "::ffff:203.0.113.7" },
+    headers: {},
+  } as unknown as IncomingMessage;
+
+  clientIp(withHeader, true, [], (p) => named.push(p));
+  clientIp(withHeader, true, [], (p) => named.push(p));
+  assert.deepEqual(named, ["203.0.113.7", "203.0.113.7"], "the caller decides about repeats");
+
+  // Nothing to pin when nobody claimed to be forwarding anything.
+  const quiet: string[] = [];
+  clientIp(without, true, [], (p) => quiet.push(p));
+  assert.deepEqual(quiet, []);
+
+  // Already pinned, so there is nothing left to say.
+  const pinned: string[] = [];
+  clientIp(withHeader, true, ["203.0.113.7"], (p) => pinned.push(p));
+  assert.deepEqual(pinned, []);
+});

@@ -92,12 +92,20 @@ export function clientIp(
   req: IncomingMessage,
   trustProxy: boolean,
   trustedProxies: string[] = [],
+  onUnpinnedProxy?: (peer: string) => void,
 ): string {
   const peer = req.socket.remoteAddress || "unknown";
   const fromProxy =
     trustedProxies.length === 0 || trustedProxies.includes(normaliseIp(peer));
 
   if (trustProxy && fromProxy) {
+    // Nothing else can see this. Working out which address to pin means either
+    // reading it off the machine at the moment a request is in flight, or
+    // guessing — and a wrong guess here is silent, because believing nobody
+    // looks exactly like believing everybody until somebody lies.
+    if (trustedProxies.length === 0 && onUnpinnedProxy && hasForwardingHeader(req)) {
+      onUnpinnedProxy(normaliseIp(peer));
+    }
     const cf = header(req, "cf-connecting-ip");
     if (cf) return cf;
 
@@ -111,6 +119,14 @@ export function clientIp(
     }
   }
   return peer;
+}
+
+function hasForwardingHeader(req: IncomingMessage): boolean {
+  return Boolean(
+    header(req, "cf-connecting-ip") ??
+      header(req, "x-real-ip") ??
+      header(req, "x-forwarded-for"),
+  );
 }
 
 /** ::ffff:192.0.2.1 and 192.0.2.1 are the same machine. */

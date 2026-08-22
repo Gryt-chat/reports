@@ -178,7 +178,7 @@ async function ingest(
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const who: Submitter = {
-    ip: clientIp(req, config.trustProxy, config.trustedProxies),
+    ip: clientIp(req, config.trustProxy, config.trustedProxies, nameTheProxy),
     appId,
     installId: report.app.installId,
     subject,
@@ -223,6 +223,29 @@ async function ingest(
     if (stored) void notify(config, stored);
   }
   void triager.tick();
+}
+
+/**
+ * Say which address the forwarding header was believed from, once.
+ *
+ * The startup warning says the header is trusted from anyone and that
+ * REPORTS_TRUSTED_PROXIES should be set — and then leaves whoever reads it to
+ * work out what to set it to, which needs a packet capture or a lucky guess.
+ * The service is the only thing that can see the answer, so it says it.
+ *
+ * Once per address, because this is a fact about the deployment rather than an
+ * event, and repeating it every request would bury the reports.
+ */
+const namedProxies = new Set<string>();
+
+function nameTheProxy(peer: string): void {
+  if (namedProxies.has(peer)) return;
+  namedProxies.add(peer);
+  consola.warn(
+    `[reports] Believed a forwarding header from ${peer}. If that is the ` +
+      `proxy, set REPORTS_TRUSTED_PROXIES=${peer} and it will stop being ` +
+      "believed from anywhere else.",
+  );
 }
 
 function respondToError(res: ServerResponse, err: unknown): void {
