@@ -119,12 +119,18 @@ field an app starts sending before this service knows about it still lands in
 
 ### Responses
 
+`GET /healthz` answers `{"ok": true}` and nothing else. The service name, the
+version and the uptime are on the inbox listener, behind sign-in: together they
+say which release is running and therefore which fixes are not in it, which is
+the first thing worth writing down about a host and the last thing worth
+handing out.
+
 | Status | Meaning |
 |---|---|
 | `202` | Stored. Body is `{ id, receivedAt }`. |
 | `400` | `invalid_json`, `invalid_body`, `invalid_type`, `empty_message`. |
-| `401` | `missing_app`, `unknown_app`, `bad_app_key`, `bad_signature`, `replayed_assertion`, `signature_required`. |
-| `403` | `banned`. Says nothing about which identifier is banned. |
+| `401` | `missing_app`, `bad_app_key`, `bad_signature`, `replayed_assertion`, `signature_required`. A wrong key and an app nobody configured answer the same, so the difference cannot be used to learn which apps exist. |
+| `403` | `banned`, or `origin_not_allowed`. Neither says which. |
 | `413` | `body_too_large`. |
 | `429` | `rate_limited`, with `Retry-After`. |
 
@@ -163,9 +169,19 @@ This service authorises nothing on any server, so it has no reason to agree with
 a server's namespace — and the thumbprint is what those subjects are derived
 from anyway. Set `REPORTS_REQUIRE_SIGNATURE=true` once every client signs.
 
+**Where the request came from.** A browser sends an `Origin` and it has to be
+on `REPORTS_CORS_ORIGINS` or the report is refused. Native clients send none —
+React Native does not, and neither does Electron's main process — so this is not
+a check every client has to pass. It exists for one case: a page on the open web
+making somebody's browser file reports. CORS already stops that page reading the
+answer; without this the report lands in the table anyway.
+
 **Rate limits** are counted per IP, per install id and per identity key, in
 SQLite rather than in memory, so restarting the service is not a way to clear
-your limit. **Bans** come in four kinds: `ip`, `install`, `subject` and `app`.
+your limit. The address they are counted against comes from a header when
+`REPORTS_TRUST_PROXY` is on, so `REPORTS_TRUSTED_PROXIES` decides whose header
+to believe — without it, anything that can reach the port directly can name its
+own address and skip both the limits and the bans. **Bans** come in four kinds: `ip`, `install`, `subject` and `app`.
 The last one turns off a whole client and exists for the day a key leaks.
 
 ## Triage
@@ -314,7 +330,8 @@ before deploying:
 | `REPORTS_ADMIN_HOST` | `127.0.0.1` | Loopback on a host. The Docker image sets `0.0.0.0`, because in a container the published port is what restricts it. |
 | `REPORTS_OIDC_ISSUER` | — | e.g. `https://auth.gryt.chat/realms/gryt`. With `_CLIENT_ID` and `_CLIENT_SECRET`, turns on sign-in. |
 | `REPORTS_BOOTSTRAP_ADMIN` | — | Who gets in first, while the list is empty. |
-| `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. Right behind the tunnel, wrong if the port is reachable directly. |
+| `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. |
+| `REPORTS_TRUSTED_PROXIES` | — | And believe it only from these addresses. Empty believes any peer, which is only right when nothing but the proxy can reach the port. |
 | `REPORTS_CORS_ORIGINS` | — | Browser origins allowed to POST. The web client needs listing. |
 | `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
 
