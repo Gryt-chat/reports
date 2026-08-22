@@ -140,6 +140,42 @@ export function header(req: IncomingMessage, name: string): string | null {
   return value?.trim() || null;
 }
 
+/**
+ * Whether a browser origin may post reports.
+ *
+ * One function because there are two questions — may this response carry CORS
+ * headers, and may this report be stored — and they have to answer the same
+ * way. They were two copies of the same condition, which is a thing that
+ * drifts once and then refuses a real client for a reason nobody can find.
+ *
+ * ## Loopback is always allowed
+ *
+ * The desktop client serves its own UI from a local HTTP server — port 15738,
+ * or whatever the OS hands out when that one is taken — so its renderer is a
+ * browser context and sends an `Origin` like any other. No list can name it:
+ * the port is not fixed, and the app is not a deployment somebody configures.
+ *
+ * This costs nothing. `Origin` is set by the browser from the page's real
+ * origin and cannot be forged by the page, so a site on the open web can never
+ * claim to be `http://127.0.0.1:15738` — which is the entire thing this check
+ * exists to stop. What loopback describes is software already running on the
+ * reporter's own machine, and something running there has easier ways to post
+ * a report than driving the browser into doing it.
+ */
+export function isAllowedOrigin(origin: string, allowed: string[]): boolean {
+  if (allowed.includes("*") || allowed.includes(origin)) return true;
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== "http:" && protocol !== "https:") return false;
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+  } catch {
+    // "null", which is what a sandboxed iframe or a file:// page sends. Not a
+    // loopback origin and not on the list.
+    return false;
+  }
+}
+
 export function applyCors(
   req: IncomingMessage,
   res: ServerResponse,
@@ -147,7 +183,7 @@ export function applyCors(
 ): void {
   const origin = header(req, "origin");
   if (!origin) return;
-  if (!allowed.includes(origin) && !allowed.includes("*")) return;
+  if (!isAllowedOrigin(origin, allowed)) return;
 
   res.setHeader("access-control-allow-origin", origin);
   res.setHeader("vary", "origin");
