@@ -231,12 +231,17 @@ export function oidcFrom(config: Config): OidcConfig | null {
   const clientId = process.env.REPORTS_OIDC_CLIENT_ID?.trim();
   const clientSecret = process.env.REPORTS_OIDC_CLIENT_SECRET?.trim();
 
-  if (!issuer && !clientId && !clientSecret) return null;
+  // The issuer alone decides whether sign-in is on. Requiring all three to be
+  // absent looked stricter and was worse: a compose file that defaults the
+  // client id to something sensible — which is a reasonable thing for a compose
+  // file to do — then reads as half configured and takes the whole service
+  // down. That happened on the first deploy, on 2026-08-22.
+  if (!issuer) return null;
 
-  if (!issuer || !clientId || !clientSecret) {
+  if (!clientId || !clientSecret) {
     throw new Error(
-      "OIDC is half configured. REPORTS_OIDC_ISSUER, REPORTS_OIDC_CLIENT_ID " +
-        "and REPORTS_OIDC_CLIENT_SECRET all have to be set, or none of them.",
+      "REPORTS_OIDC_ISSUER is set, so sign-in is on, but " +
+        "REPORTS_OIDC_CLIENT_ID or REPORTS_OIDC_CLIENT_SECRET is empty.",
     );
   }
 
