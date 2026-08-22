@@ -36,6 +36,10 @@ COPY --from=deps --chown=gryt:gryt /app/node_modules ./node_modules
 COPY --from=builder --chown=gryt:gryt /app/package.json ./package.json
 COPY --from=builder --chown=gryt:gryt /app/dist ./dist
 COPY --from=dashboard --chown=gryt:gryt /dist-ui ./dist-ui
+# The mark the digest attaches. `digest.ts` reads it relative to dist/, so it
+# has to sit beside dist rather than inside it — the compiler does not copy
+# non-TypeScript files and this is the only asset the service ships.
+COPY --from=builder --chown=gryt:gryt /app/assets ./assets
 
 # Every report anyone has ever sent lives in here. Mount it.
 RUN mkdir -p /data && chown -R gryt:gryt /data
