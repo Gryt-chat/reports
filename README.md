@@ -357,6 +357,13 @@ With no OIDC configured, the admin token guards the inbox instead: open
 `/admin?token=…` once and it is swapped for a `SameSite=Strict` cookie so it
 stops turning up in history and referrers.
 
+**Signing out goes through the realm.** Clearing this service's own cookie is
+not signing out: Keycloak still holds an SSO session, so the next request to
+`/admin/login` comes back with a fresh code and no prompt. `/admin/logout`
+clears both cookies and hands you to the realm's `end_session_endpoint`, which
+sends you back to the sign-in page. On a deployment with only the token, it
+clears the cookies and there is nowhere to send you.
+
 **The token stays for scripts.** `Authorization: Bearer $REPORTS_ADMIN_TOKEN`
 works whether or not sign-in is configured. A person gets a session, a script
 gets a token, and neither has to pretend to be the other.
