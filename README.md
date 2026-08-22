@@ -207,12 +207,48 @@ something now tracked, a sentence for something turned down.
 
 ## The inbox
 
-`/admin`, behind `REPORTS_ADMIN_TOKEN`. Open it once with `?token=…` and the
-token is swapped for a `SameSite=Strict` cookie so it stops turning up in
-history and referrers.
+**Two listeners, not two services.** Ingest has to be reachable from anywhere —
+the apps post from wherever the person is. The inbox does not, and on one port
+the admin token would be the only thing between the open internet and every
+report anyone has ever sent. So `/admin` gets its own port, bound to loopback by
+default, and the public listener answers `404` for `/admin` rather than
+inviting a guess at a token.
 
-Server-rendered, no build step and no client JavaScript, because the whole page
-is text strangers wrote. The same data is available as JSON:
+| | |
+|---|---|
+| `PORT` (8080) | `POST /v1/reports`, `/healthz`. The one to route from the internet. |
+| `REPORTS_ADMIN_PORT` (8081) | `/admin`. Loopback unless you say otherwise. |
+
+Setting them to the same number puts both on one listener and logs a warning.
+Fine on a laptop.
+
+**People sign in with their Gryt account.** Keycloak says who somebody is; a
+list inside this service says whether they may read the inbox. A Gryt account is
+not enough on its own, because anybody can make one.
+
+That list is here rather than in the realm on purpose: it is two or three
+people, and adding somebody's partner to it should be a form field, not a trip
+through the Keycloak admin console. Add them by user id, username or email — the
+last two work before they have ever signed in, and the entry pins itself to
+their user id the first time they do, which is the one thing about an account
+they cannot change afterwards. Removing somebody takes effect on their next
+request, not when their session happens to expire, and the last person on the
+list cannot be removed.
+
+`REPORTS_BOOTSTRAP_ADMIN` names whoever gets in first, and applies only while
+the list is empty.
+
+With no OIDC configured, the admin token guards the inbox instead: open
+`/admin?token=…` once and it is swapped for a `SameSite=Strict` cookie so it
+stops turning up in history and referrers.
+
+**The token stays for scripts.** `Authorization: Bearer $REPORTS_ADMIN_TOKEN`
+works whether or not sign-in is configured. A person gets a session, a script
+gets a token, and neither has to pretend to be the other.
+
+The pages are server-rendered, with no build step and no client JavaScript,
+because the whole page is text strangers wrote. The same data is available as
+JSON:
 
 ```
 GET  /admin/api/reports?shelf=open&type=bug&verdict=actionable&status=resolved&triage=pending&q=voice&page=2
@@ -223,6 +259,9 @@ POST /admin/api/reports/<id>/retriage
 GET  /admin/api/bans
 POST /admin/api/bans                  {"kind":"install","value":"…","reason":"…","expiresAt":null}
 POST /admin/api/bans/<id>/delete
+GET  /admin/api/people
+POST /admin/api/people                {"identifier":"partner@example.com","note":"on the board"}
+POST /admin/api/people/<id>/delete
 ```
 
 `shelf` is `open` (the default), `closed` or `all`; a named `status` overrides
@@ -252,16 +291,25 @@ before deploying:
 | Variable | Default | |
 |---|---|---|
 | `REPORTS_APP_KEYS` | — | `mobile:key,desktop:key`. Required. |
-| `REPORTS_ADMIN_TOKEN` | — | No token, no `/admin`. |
+| `REPORTS_ADMIN_TOKEN` | — | For scripts. People sign in instead. |
+| `REPORTS_ADMIN_PORT` | `8081` | Where the inbox listens. Never route this from the internet without sign-in in front. |
+| `REPORTS_ADMIN_HOST` | `127.0.0.1` | Loopback on a host. The Docker image sets `0.0.0.0`, because in a container the published port is what restricts it. |
+| `REPORTS_OIDC_ISSUER` | — | e.g. `https://auth.gryt.chat/realms/gryt`. With `_CLIENT_ID` and `_CLIENT_SECRET`, turns on sign-in. |
+| `REPORTS_BOOTSTRAP_ADMIN` | — | Who gets in first, while the list is empty. |
 | `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. Right behind the tunnel, wrong if the port is reachable directly. |
 | `REPORTS_CORS_ORIGINS` | — | Browser origins allowed to POST. The web client needs listing. |
 | `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
 
 ```sh
-docker run -p 8080:8080 -v gryt-reports:/data \
+docker run -v gryt-reports:/data \
+  -p 8080:8080 \
+  -p 127.0.0.1:8081:8081 \
   -e REPORTS_APP_KEYS=mobile:… -e REPORTS_ADMIN_TOKEN=… \
   ghcr.io/gryt-chat/reports:latest
 ```
+
+Publish 8080 wherever it needs to be reachable from. Keep 8081 on loopback, or
+put sign-in and a hostname in front of it.
 
 ## Licence
 

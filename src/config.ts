@@ -11,6 +11,16 @@ import consola from "consola";
 export interface Config {
   host: string;
   port: number;
+  /**
+   * Where the inbox listens.
+   *
+   * Its own listener, because ingest and the inbox want opposite things. The
+   * endpoint the apps post to has to be reachable from anywhere; every report
+   * anyone has ever sent does not, and putting them on one port makes the admin
+   * token the only thing between the open internet and all of it.
+   */
+  adminHost: string;
+  adminPort: number;
   dataDir: string;
   version: string;
 
@@ -130,9 +140,25 @@ export function loadConfig(): Config {
     );
   }
 
+  const port = int("PORT", 8080, 1, 65535);
+  const adminPort = int("REPORTS_ADMIN_PORT", 8081, 1, 65535);
+
+  if (adminPort === port) {
+    consola.warn(
+      "[config] REPORTS_ADMIN_PORT is the same as PORT, so the inbox is on " +
+        "the public listener. Fine on a laptop, wrong anywhere the port is " +
+        "routed from the internet.",
+    );
+  }
+
   return {
     host: process.env.HOST || "0.0.0.0",
-    port: int("PORT", 8080, 1, 65535),
+    port,
+    // Loopback by default: reachable over an SSH tunnel and from nothing else.
+    // In a container this has to be 0.0.0.0 and the published port is what
+    // restricts it — the Dockerfile sets that, and says why.
+    adminHost: process.env.REPORTS_ADMIN_HOST || "127.0.0.1",
+    adminPort,
     dataDir: process.env.DATA_DIR || "./data",
     version: process.env.REPORTS_VERSION?.trim().replace(/^v/, "") || "dev",
 

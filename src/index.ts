@@ -22,8 +22,19 @@ import {
   type Submitter,
 } from "./limits.ts";
 import { notify } from "./notify.ts";
+import { oidcFrom, type OidcConfig } from "./oidc.ts";
 import { newReportId, normaliseReport } from "./report.ts";
 import { Triager } from "./triage.ts";
+
+/**
+ * Which door a request came in by.
+ *
+ * Ingest has to be reachable from anywhere — that is the entire job. The inbox
+ * does not, and on one port the admin token would be the only thing between the
+ * open internet and every report anyone has ever sent. So they are two
+ * listeners, and the public one does not serve /admin at all.
+ */
+type Surface = "public" | "admin";
 
 const startedAt = Date.now();
 
@@ -36,18 +47,29 @@ async function main(): Promise<void> {
   });
   triager.start();
 
+  const oidc = oidcFrom(config);
+
   const server = http.createServer((req, res) => {
-    void handle(req, res, config, triager).catch((err) => {
+    void handle(req, res, config, triager, oidc, "public").catch((err) => {
       respondToError(res, err);
     });
   });
+
+  const sameListener = config.adminPort === config.port;
+  const adminServer = sameListener
+    ? null
+    : http.createServer((req, res) => {
+        void handle(req, res, config, triager, oidc, "admin").catch((err) => {
+          respondToError(res, err);
+        });
+      });
 
   const prune = setInterval(() => pruneOldEvents(Date.now()), 60 * 60 * 1000);
   prune.unref();
 
   server.listen(config.port, config.host, () => {
     consola.success(
-      `[reports] ${config.version} listening on ${config.host}:${config.port}`,
+      `[reports] ${config.version} taking reports on ${config.host}:${config.port}`,
     );
     consola.info(
       `[reports] ${config.appKeys.size} app key(s), signature ${
@@ -56,9 +78,17 @@ async function main(): Promise<void> {
     );
   });
 
+  adminServer?.listen(config.adminPort, config.adminHost, () => {
+    consola.success(
+      `[reports] inbox on ${config.adminHost}:${config.adminPort}` +
+        (oidc ? `, sign in through ${oidc.issuer}` : ", admin token only"),
+    );
+  });
+
   const shutdown = (signal: string): void => {
     consola.info(`[reports] ${signal}, shutting down`);
     triager.stop();
+    adminServer?.close();
     server.close(() => {
       closeDb();
       process.exit(0);
@@ -74,6 +104,8 @@ async function handle(
   res: ServerResponse,
   config: Config,
   triager: Triager,
+  oidc: OidcConfig | null,
+  surface: Surface,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   applyCors(req, res, config.corsOrigins);
@@ -94,12 +126,24 @@ async function handle(
   }
 
   if (url.pathname === "/v1/reports" && req.method === "POST") {
+    // Only on the door it belongs to. The inbox listener taking reports would
+    // work and would be one more thing to reason about when deciding what is
+    // safe to expose.
+    if (surface === "admin" && config.adminPort !== config.port) {
+      throw new HttpError(404, "not_found", "No such endpoint");
+    }
     await ingest(req, res, config, triager);
     return;
   }
 
   if (url.pathname.startsWith("/admin")) {
-    await handleAdmin(req, res, url, config);
+    // On the public port this is not "wrong token", it is "no such thing".
+    // Anything reachable from the internet should not advertise that an inbox
+    // exists behind it, let alone invite a guess at the token.
+    if (surface === "public" && config.adminPort !== config.port) {
+      throw new HttpError(404, "not_found", "No such endpoint");
+    }
+    await handleAdmin(req, res, url, config, oidc);
     return;
   }
 

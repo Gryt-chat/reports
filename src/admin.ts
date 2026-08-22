@@ -3,8 +3,15 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { Config } from "./config.ts";
 import {
+  addAdmin,
   addBan,
+  countAdmins,
   countReports,
+  findAdmin,
+  listAdmins,
+  removeAdmin,
+  touchAdmin,
+  type AdminRow,
   getReport,
   isReportStatus,
   listBans,
@@ -23,9 +30,30 @@ import {
   type TriageStatus,
 } from "./db.ts";
 import { esc, header, HttpError, readBody, sendHtml, sendJson } from "./http.ts";
+import {
+  completeLogin,
+  readSession,
+  signSession,
+  startLogin,
+  type OidcConfig,
+  type Person,
+} from "./oidc.ts";
 
 const COOKIE = "gryt_reports_admin";
+const SESSION_COOKIE = "gryt_reports_session";
+const LOGIN_COOKIE = "gryt_reports_login";
 const PAGE_SIZE = 50;
+
+/**
+ * Who is asking.
+ *
+ * A person signed in with their Gryt account, or a script holding the static
+ * token. Both may read the inbox; only a person shows up in the page header,
+ * and only a person can be taken off the list later.
+ */
+type Actor =
+  | { kind: "token" }
+  | { kind: "person"; subject: string; name: string };
 
 /**
  * The inbox.
@@ -40,17 +68,39 @@ export async function handleAdmin(
   res: ServerResponse,
   url: URL,
   config: Config,
+  oidc: OidcConfig | null,
 ): Promise<void> {
-  if (!config.adminToken) {
-    throw new HttpError(404, "not_found", "No admin token configured");
+  if (!config.adminToken && !oidc) {
+    throw new HttpError(404, "not_found", "Nothing configured to guard the inbox");
   }
 
   const path = url.pathname.replace(/\/+$/, "") || "/admin";
 
-  // Signing in is one link with the token on it. It is swapped for a cookie
-  // immediately so it stops turning up in browser history and referrers.
+  if (oidc) {
+    if (path === "/admin/login") {
+      await sendToKeycloak(res, oidc);
+      return;
+    }
+    if (path === "/admin/callback") {
+      await returnFromKeycloak(req, res, url, oidc);
+      return;
+    }
+    if (path === "/admin/logout") {
+      res.writeHead(303, {
+        "set-cookie": `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/admin; Max-Age=0`,
+        location: "/admin/login",
+      });
+      res.end();
+      return;
+    }
+  }
+
+  // Signing in with the static token is one link with it on. It is swapped for
+  // a cookie immediately so it stops turning up in history and referrers. Only
+  // when nothing better is configured — with Keycloak on, people sign in and
+  // the token is for scripts.
   const queryToken = url.searchParams.get("token");
-  if (queryToken) {
+  if (queryToken && config.adminToken && !oidc) {
     if (!tokenMatches(queryToken, config.adminToken)) {
       throw new HttpError(401, "unauthorised", "Wrong token");
     }
@@ -62,12 +112,20 @@ export async function handleAdmin(
     return;
   }
 
-  if (!authorised(req, config.adminToken)) {
-    throw new HttpError(401, "unauthorised", "Admin token required");
+  const actor = authorise(req, config, oidc);
+  if (!actor) {
+    // A browser gets sent to sign in. Anything asking for JSON, or holding a
+    // wrong token, gets told plainly rather than handed a redirect to parse.
+    if (oidc && req.method === "GET" && !path.startsWith("/admin/api")) {
+      res.writeHead(302, { location: "/admin/login" });
+      res.end();
+      return;
+    }
+    throw new HttpError(401, "unauthorised", "Sign in, or send the admin token");
   }
 
   if (req.method === "POST") {
-    await handlePost(req, res, path, config);
+    await handlePost(req, res, path, config, actor);
     return;
   }
 
@@ -82,6 +140,16 @@ export async function handleAdmin(
 
   if (path === "/admin/api/bans") {
     sendJson(res, 200, { bans: listBans() });
+    return;
+  }
+
+  if (path === "/admin/api/people") {
+    sendJson(res, 200, { people: listAdmins() });
+    return;
+  }
+
+  if (path === "/admin/people") {
+    sendHtml(res, 200, peoplePage(listAdmins(), actor, oidc));
     return;
   }
 
@@ -107,7 +175,7 @@ export async function handleAdmin(
     const report = getReport(detail[1]);
     if (!report) throw new HttpError(404, "not_found", "No such report");
     markRead(report.id, new Date().toISOString());
-    sendHtml(res, 200, detailPage(report));
+    sendHtml(res, 200, detailPage(report, actor));
     return;
   }
 
@@ -115,7 +183,7 @@ export async function handleAdmin(
     const filter = filterFrom(url);
     const offset = offsetFrom(url);
     const rows = listReports({ ...filter, limit: PAGE_SIZE, offset });
-    sendHtml(res, 200, listPage(rows, countReports(filter), url, offset));
+    sendHtml(res, 200, listPage(rows, countReports(filter), url, offset, actor));
     return;
   }
 
@@ -127,6 +195,7 @@ async function handlePost(
   res: ServerResponse,
   path: string,
   config: Config,
+  actor: Actor,
 ): Promise<void> {
   // The HTML pages post to /admin/reports/…, everything else to
   // /admin/api/reports/…. Same actions, so one route answers both.
@@ -182,6 +251,66 @@ async function handlePost(
     return;
   }
 
+  if (path === "/admin/people" || path === "/admin/api/people") {
+    const raw = (await readBody(req, 16 * 1024)).toString("utf8");
+    const fields = (header(req, "content-type") ?? "").includes("application/json")
+      ? (JSON.parse(raw || "{}") as { identifier?: string; note?: string })
+      : (Object.fromEntries(new URLSearchParams(raw)) as {
+          identifier?: string;
+          note?: string;
+        });
+
+    const identifier = fields.identifier?.trim().slice(0, 200);
+    if (!identifier) {
+      throw new HttpError(
+        400,
+        "invalid_person",
+        "identifier is required: a Keycloak user id, username or email",
+      );
+    }
+
+    addAdmin({
+      id: `adm_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+      identifier,
+      note: fields.note?.trim().slice(0, 200) || null,
+      addedAt: new Date().toISOString(),
+      addedBy: actor.kind === "person" ? actor.name : "the admin token",
+    });
+
+    if (path.startsWith("/admin/api/")) {
+      sendJson(res, 201, { identifier });
+      return;
+    }
+
+    res.writeHead(303, { location: "/admin/people" });
+    res.end();
+    return;
+  }
+
+  const drop = path.match(/^\/admin(?:\/api)?\/people\/([\w-]+)\/(?:remove|delete)$/);
+  if (drop) {
+    // Refusing the last one is not politeness. The list is what admits people,
+    // so emptying it locks everybody out of the page that could fix it.
+    if (countAdmins() <= 1) {
+      throw new HttpError(
+        409,
+        "last_admin",
+        "That is the only person with access. Add somebody else first.",
+      );
+    }
+
+    removeAdmin(drop[1]);
+
+    if (path.startsWith("/admin/api/")) {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    res.writeHead(303, { location: "/admin/people" });
+    res.end();
+    return;
+  }
+
   if (path === "/admin/api/bans") {
     const body = JSON.parse(
       (await readBody(req, 16 * 1024)).toString("utf8") || "{}",
@@ -221,21 +350,148 @@ async function handlePost(
   throw new HttpError(404, "not_found", "No such action");
 }
 
-function authorised(req: IncomingMessage, expected: string): boolean {
-  const auth = header(req, "authorization");
-  if (auth?.startsWith("Bearer ")) {
-    return tokenMatches(auth.slice(7).trim(), expected);
-  }
-
+function cookie(req: IncomingMessage, want: string): string | null {
   const cookies = header(req, "cookie") ?? "";
   for (const pair of cookies.split(";")) {
     const [name, ...rest] = pair.trim().split("=");
-    if (name === COOKIE) {
-      return tokenMatches(decodeURIComponent(rest.join("=")), expected);
-    }
+    if (name === want) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
+function authorise(
+  req: IncomingMessage,
+  config: Config,
+  oidc: OidcConfig | null,
+): Actor | null {
+  const auth = header(req, "authorization");
+  if (config.adminToken && auth?.startsWith("Bearer ")) {
+    return tokenMatches(auth.slice(7).trim(), config.adminToken) ? { kind: "token" } : null;
   }
 
-  return false;
+  if (oidc) {
+    const raw = cookie(req, SESSION_COOKIE);
+    if (raw) {
+      const session = readSession(oidc, raw, Date.now());
+      // Checked against the list on every request rather than trusted for the
+      // life of the cookie, so removing somebody takes effect immediately
+      // instead of whenever their session happens to expire.
+      if (session && findAdmin(session.subject, session.name, null)) {
+        return { kind: "person", subject: session.subject, name: session.name };
+      }
+    }
+    return null;
+  }
+
+  const raw = cookie(req, COOKIE);
+  if (raw && config.adminToken && tokenMatches(raw, config.adminToken)) {
+    return { kind: "token" };
+  }
+
+  return null;
+}
+
+/** Send somebody off to sign in, remembering what to check when they return. */
+async function sendToKeycloak(res: ServerResponse, oidc: OidcConfig): Promise<void> {
+  const { url, state, verifier } = await startLogin(oidc);
+
+  // SameSite=Lax rather than Strict: this cookie has to survive the trip back
+  // from Keycloak, which is a cross-site navigation, and Strict would drop it.
+  res.writeHead(302, {
+    "set-cookie":
+      `${LOGIN_COOKIE}=${encodeURIComponent(`${state}.${verifier}`)}; ` +
+      "HttpOnly; SameSite=Lax; Path=/admin; Max-Age=600",
+    location: url,
+  });
+  res.end();
+}
+
+async function returnFromKeycloak(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  oidc: OidcConfig,
+): Promise<void> {
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const pending = cookie(req, LOGIN_COOKIE);
+
+  if (!code || !state || !pending) {
+    throw new HttpError(400, "bad_login", "That sign-in did not come from here");
+  }
+
+  const [expectedState, verifier] = pending.split(".");
+  if (!expectedState || expectedState !== state) {
+    throw new HttpError(400, "bad_login", "That sign-in did not come from here");
+  }
+
+  const person = await completeLogin(oidc, code, verifier);
+  const entry = admit(oidc, person);
+
+  const clearLogin = `${LOGIN_COOKIE}=; HttpOnly; SameSite=Lax; Path=/admin; Max-Age=0`;
+
+  if (!entry) {
+    res.writeHead(403, {
+      "content-type": "text/html; charset=utf-8",
+      "set-cookie": clearLogin,
+    });
+    res.end(
+      page(
+        "No access",
+        `<h1>No access</h1>
+         <p>You are signed in as ${esc(person.name)}, and that account is not on
+         the list for this inbox.</p>
+         <p class="muted">Somebody already on it can add you. Your user id is
+         <code>${esc(person.subject)}</code>.</p>`,
+      ),
+    );
+    return;
+  }
+
+  touchAdmin(entry.id, person.subject, person.name, new Date().toISOString());
+
+  const secure = oidc.redirectUri.startsWith("https://") ? " Secure;" : "";
+  res.writeHead(303, {
+    "set-cookie": [
+      clearLogin,
+      `${SESSION_COOKIE}=${encodeURIComponent(signSession(oidc, person, Date.now()))}; ` +
+        `HttpOnly;${secure} SameSite=Lax; Path=/admin; Max-Age=${oidc.sessionMaxAgeSec}`,
+    ],
+    location: "/admin",
+  });
+  res.end();
+}
+
+/**
+ * The list decides, with one exception: the first person in.
+ *
+ * An empty list would otherwise lock everyone out of the thing that manages it.
+ * The bootstrap name only applies while the list is empty, so removing somebody
+ * later does not quietly let them back in through the same door.
+ */
+function admit(oidc: OidcConfig, person: Person): AdminRow | null {
+  const existing = findAdmin(person.subject, person.name, person.email);
+  if (existing) return existing;
+
+  if (countAdmins() > 0 || !oidc.bootstrap) return null;
+
+  const wanted = oidc.bootstrap.toLowerCase();
+  const matches =
+    wanted === person.subject.toLowerCase() ||
+    wanted === person.name.toLowerCase() ||
+    wanted === (person.email ?? "").toLowerCase();
+
+  if (!matches) return null;
+
+  addAdmin({
+    id: `adm_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+    identifier: person.subject,
+    note: "first in, from REPORTS_BOOTSTRAP_ADMIN",
+    addedAt: new Date().toISOString(),
+    addedBy: null,
+  });
+
+  return findAdmin(person.subject, person.name, person.email);
 }
 
 function tokenMatches(given: string, expected: string): boolean {
@@ -278,6 +534,7 @@ const STYLE = `
   a { color: inherit; }
   h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
   .muted { opacity: .6; }
+  .who { font-size: .8rem; margin: 0 0 1rem; }
   .filters { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
   .filters a { border: 1px solid currentColor; border-radius: 999px; font-size: .8rem; opacity: .7; padding: .15rem .7rem; text-decoration: none; }
   ul.reports { list-style: none; margin: 0; padding: 0; }
@@ -298,6 +555,14 @@ const STYLE = `
   form.decide input { flex: 1 1 16rem; font: inherit; padding: .3rem .5rem; }
 `;
 
+/** Who you are and how to stop being them, on every page that has an actor. */
+function whoami(actor: Actor): string {
+  if (actor.kind === "token") {
+    return '<p class="muted who">signed in with the admin token</p>';
+  }
+  return `<p class="muted who">${esc(actor.name)} · <a href="/admin/people">people</a> · <a href="/admin/logout">sign out</a></p>`;
+}
+
 function page(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -307,7 +572,13 @@ function page(title: string, body: string): string {
 <body>${body}</body></html>`;
 }
 
-function listPage(rows: ReportSummary[], total: number, url: URL, offset: number): string {
+function listPage(
+  rows: ReportSummary[],
+  total: number,
+  url: URL,
+  offset: number,
+  actor: Actor,
+): string {
   const s = stats();
   const links = [
     ["Open", ""],
@@ -364,7 +635,8 @@ function listPage(rows: ReportSummary[], total: number, url: URL, offset: number
 
   return page(
     "Gryt reports",
-    `<h1>Gryt reports</h1>
+    `${whoami(actor)}
+     <h1>Gryt reports</h1>
      <p class="muted">${s.open} open · ${s.unread} unread · ${s.pending} waiting on triage · ${s.total} in total · ${s.bugs} bugs · ${s.feedback} feedback</p>
      <div class="filters">${links}</div>
      <ul class="reports">${items}</ul>
@@ -376,6 +648,55 @@ function pageLink(url: URL, page: number): string {
   const next = new URL(url.toString());
   next.searchParams.set("page", String(page));
   return `${next.pathname}?${next.searchParams.toString()}`;
+}
+
+function peoplePage(people: AdminRow[], actor: Actor, oidc: OidcConfig | null): string {
+  const rows = people.length
+    ? people
+        .map(
+          (person) => `<tr>
+            <td>${esc(person.name ?? person.identifier)}${
+              person.name && person.name !== person.identifier
+                ? `<br /><span class="muted">${esc(person.identifier)}</span>`
+                : ""
+            }</td>
+            <td class="muted">${esc(person.note ?? "")}</td>
+            <td class="muted">${esc(
+              person.last_seen_at ? person.last_seen_at.slice(0, 10) : "never signed in",
+            )}</td>
+            <td><form method="post" action="/admin/people/${esc(person.id)}/remove">
+              <button type="submit">Remove</button>
+            </form></td>
+          </tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4" class="muted">Nobody yet.</td></tr>';
+
+  return page(
+    "Who can read this",
+    `${whoami(actor)}
+     <p><a href="/admin">← inbox</a></p>
+     <h1>Who can read this</h1>
+     <p class="muted">${
+       oidc
+         ? "Everyone here signs in with their Gryt account. Anyone else gets turned away, whether or not they have one."
+         : "Sign-in is not configured, so this list does nothing and the admin token is what guards the inbox."
+     }</p>
+     <table>
+       <tr><th>Who</th><th>Note</th><th>Last seen</th><th></th></tr>
+       ${rows}
+     </table>
+     <h2>Add somebody</h2>
+     <form method="post" action="/admin/people" class="decide">
+       <input type="text" name="identifier" maxlength="200" required
+              placeholder="Keycloak user id, username or email" />
+       <input type="text" name="note" maxlength="200" placeholder="who they are" />
+       <button type="submit">Add</button>
+     </form>
+     <p class="muted">A username or email works before they have ever signed in.
+     The first time they do, this pins to their user id, which is the one thing
+     about an account nobody can change.</p>`,
+  );
 }
 
 const STATUS_LABELS: Record<ReportStatus, string> = {
@@ -390,7 +711,7 @@ function statusLabel(status: ReportStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-function detailPage(r: ReportRow): string {
+function detailPage(r: ReportRow, actor: Actor): string {
   const payload = JSON.parse(r.payload) as Record<string, unknown>;
 
   const facts: [string, string | null][] = [
@@ -430,7 +751,8 @@ function detailPage(r: ReportRow): string {
 
   return page(
     r.triage_summary ?? r.id,
-    `<p><a href="/admin">← inbox</a></p>
+    `${whoami(actor)}
+     <p><a href="/admin">← inbox</a></p>
      <h1>${esc(r.triage_summary ?? r.title ?? `${r.type} report`)}</h1>
      <p class="muted">${esc(r.id)}</p>
      <pre>${esc(r.message)}</pre>
