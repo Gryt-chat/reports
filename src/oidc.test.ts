@@ -6,6 +6,7 @@ import { exportJWK, generateKeyPair, SignJWT, type JWK } from "jose";
 
 import {
   completeLogin,
+  oidcFrom,
   readSession,
   signSession,
   startLogin,
@@ -148,4 +149,26 @@ test("a session survives a round trip and nothing else does", () => {
   assert.equal(readSession(config, cookie, now + 3601_000), null);
 
   assert.equal(readSession(config, "nonsense", now), null);
+});
+
+test("a stray client id does not turn sign-in on, or take the service down", () => {
+  const env = process.env;
+  process.env = { ...env };
+  delete process.env.REPORTS_OIDC_ISSUER;
+  delete process.env.REPORTS_OIDC_CLIENT_SECRET;
+  // What a compose file defaulting this to something sensible leaves behind.
+  process.env.REPORTS_OIDC_CLIENT_ID = "reports";
+
+  try {
+    assert.equal(oidcFrom({ publicUrl: "https://reports.gryt.chat" } as never), null);
+
+    // With an issuer it is on, and then the other two really are required.
+    process.env.REPORTS_OIDC_ISSUER = "https://auth.gryt.chat/realms/gryt";
+    assert.throws(
+      () => oidcFrom({ publicUrl: "https://reports.gryt.chat" } as never),
+      /CLIENT_SECRET is empty/,
+    );
+  } finally {
+    process.env = env;
+  }
 });
