@@ -118,7 +118,7 @@ async function handle(
   }
 
   if (url.pathname.startsWith("/admin")) {
-    await handleAdmin(req, res, url, config, oidc, dashboard);
+    await handleAdmin(req, res, url, config, oidc, dashboard, triager.model);
     return;
   }
 
