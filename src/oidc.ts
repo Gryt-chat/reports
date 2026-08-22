@@ -42,6 +42,8 @@ interface Endpoints {
   authorization: string;
   token: string;
   jwks: string;
+  /** Optional: a realm that does not advertise one cannot be signed out of. */
+  endSession: string | null;
 }
 
 let cached: Endpoints | null = null;
@@ -71,6 +73,7 @@ async function discover(config: OidcConfig): Promise<Endpoints> {
     authorization_endpoint?: string;
     token_endpoint?: string;
     jwks_uri?: string;
+    end_session_endpoint?: string;
   };
 
   if (!doc.authorization_endpoint || !doc.token_endpoint || !doc.jwks_uri) {
@@ -81,6 +84,9 @@ async function discover(config: OidcConfig): Promise<Endpoints> {
     authorization: doc.authorization_endpoint,
     token: doc.token_endpoint,
     jwks: doc.jwks_uri,
+    // Not in the check above: sign-in still works without it, and failing
+    // discovery over a missing logout endpoint would take the whole inbox down.
+    endSession: doc.end_session_endpoint ?? null,
   };
   jwks = createRemoteJWKSet(new URL(cached.jwks));
 
@@ -115,6 +121,51 @@ export async function startLogin(config: OidcConfig): Promise<LoginStart> {
   url.searchParams.set("code_challenge_method", "S256");
 
   return { url: url.toString(), state, verifier };
+}
+
+/**
+ * Where to land after the realm has ended the session.
+ *
+ * Derived from the callback URL rather than configured separately, because the
+ * two have to be on the same origin and one string is one fewer to get wrong.
+ */
+export function postLogoutTarget(redirectUri: string): string {
+  return new URL("/admin/login", redirectUri).toString();
+}
+
+/** The RP-initiated logout URL, as the spec calls it. */
+export function logoutUrl(
+  endpoint: string,
+  clientId: string,
+  postLogoutRedirectUri: string,
+): string {
+  const url = new URL(endpoint);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("post_logout_redirect_uri", postLogoutRedirectUri);
+  return url.toString();
+}
+
+/**
+ * Where to send somebody who is signing out.
+ *
+ * Clearing our own cookie is not signing out. The realm still holds an SSO
+ * session, so the next request to /admin/login comes straight back with a
+ * fresh code and no prompt — you click sign out and land in the inbox again,
+ * which is what GRYT-539 was.
+ *
+ * Returns null when the realm cannot be reached or advertises no logout
+ * endpoint. The caller has already cleared the cookie by then, so the worst
+ * case is the old behaviour rather than an error page in place of signing out.
+ */
+export async function endSession(config: OidcConfig): Promise<string | null> {
+  try {
+    const endpoints = await discover(config);
+    if (!endpoints.endSession) return null;
+    return logoutUrl(endpoints.endSession, config.clientId, postLogoutTarget(config.redirectUri));
+  } catch (err) {
+    consola.warn(`[oidc] Could not read the logout endpoint: ${String(err)}`);
+    return null;
+  }
 }
 
 export interface Person {

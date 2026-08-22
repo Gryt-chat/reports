@@ -6,7 +6,10 @@ import { exportJWK, generateKeyPair, SignJWT, type JWK } from "jose";
 
 import {
   completeLogin,
+  endSession,
+  logoutUrl,
   oidcFrom,
+  postLogoutTarget,
   readSession,
   signSession,
   startLogin,
@@ -44,6 +47,7 @@ before(async () => {
           authorization_endpoint: `${issuer}/auth`,
           token_endpoint: `${issuer}/token`,
           jwks_uri: `${issuer}/certs`,
+          end_session_endpoint: `${issuer}/logout`,
         }),
       );
       return;
@@ -103,6 +107,38 @@ before(async () => {
 });
 
 after(() => realm.close());
+
+test("signing out goes through the realm, not just our own cookie", async () => {
+  // Clearing the session cookie on its own leaves the realm's SSO session up,
+  // and /admin/login then comes straight back with a fresh code and no prompt.
+  const url = new URL((await endSession(config))!);
+
+  assert.equal(url.origin + url.pathname, `${issuer}/logout`);
+  assert.equal(url.searchParams.get("client_id"), "reports");
+  assert.equal(
+    url.searchParams.get("post_logout_redirect_uri"),
+    "https://reports.gryt.chat/admin/login",
+  );
+});
+
+test("the post-logout landing is the sign-in page on the callback's origin", () => {
+  assert.equal(
+    postLogoutTarget("https://reports.gryt.chat/admin/callback"),
+    "https://reports.gryt.chat/admin/login",
+  );
+  assert.equal(
+    postLogoutTarget("http://localhost:8080/admin/callback"),
+    "http://localhost:8080/admin/login",
+  );
+});
+
+test("a realm that already has query on its logout endpoint keeps it", () => {
+  const url = new URL(
+    logoutUrl("https://realm.example/logout?realm=gryt", "reports", "https://r.example/admin/login"),
+  );
+  assert.equal(url.searchParams.get("realm"), "gryt");
+  assert.equal(url.searchParams.get("client_id"), "reports");
+});
 
 test("sends people to the realm with PKCE and a state to check", async () => {
   const start = await startLogin(config);

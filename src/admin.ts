@@ -39,6 +39,7 @@ import { createTask, draftTask } from "./task.ts";
 import { blockedCount } from "./limits.ts";
 import {
   completeLogin,
+  endSession,
   readSession,
   signSession,
   startLogin,
@@ -86,6 +87,21 @@ export async function handleAdmin(
 
   const path = url.pathname.replace(/\/+$/, "") || "/admin";
 
+  // Outside the `if (oidc)` below on purpose. A deployment guarded by the
+  // static token has no Keycloak, so signing out was not a route at all there
+  // — it fell through to whatever came after and never cleared anything.
+  if (path === "/admin/logout") {
+    // Off to the realm when there is one, so the SSO session ends too and
+    // /admin/login asks for a password instead of handing back a fresh code.
+    const away = oidc ? await endSession(oidc) : null;
+    res.writeHead(303, {
+      "set-cookie": signOutCookies(oidc?.redirectUri.startsWith("https://") ?? false),
+      location: away ?? (oidc ? "/admin/login" : "/admin"),
+    });
+    res.end();
+    return;
+  }
+
   if (oidc) {
     if (path === "/admin/login") {
       await sendToKeycloak(res, oidc);
@@ -93,14 +109,6 @@ export async function handleAdmin(
     }
     if (path === "/admin/callback") {
       await returnFromKeycloak(req, res, url, oidc);
-      return;
-    }
-    if (path === "/admin/logout") {
-      res.writeHead(303, {
-        "set-cookie": `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/admin; Max-Age=0`,
-        location: "/admin/login",
-      });
-      res.end();
       return;
     }
   }
@@ -636,6 +644,26 @@ function deniedPage(name: string): string {
     <p><a class="action" href="/admin/logout">Sign in as somebody else</a></p>
   </main>
 </body></html>`;
+}
+
+/**
+ * The Set-Cookie headers that end a session, whichever kind it was.
+ *
+ * Both cookies get cleared every time. Either one on its own is enough to keep
+ * somebody signed in, and the token cookie outlives a Keycloak session by
+ * thirty days, so clearing only the session cookie left the inbox open.
+ *
+ * The attributes have to match what each was set with. A Set-Cookie whose Path
+ * or SameSite differs deletes nothing, and the response looks identical to one
+ * that worked — same status, same header, still signed in.
+ */
+export function signOutCookies(secure: boolean): string[] {
+  const flag = secure ? " Secure;" : "";
+  return [
+    `${SESSION_COOKIE}=; HttpOnly;${flag} SameSite=Lax; Path=/admin; Max-Age=0`,
+    `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=0`,
+    `${LOGIN_COOKIE}=; HttpOnly; SameSite=Lax; Path=/admin; Max-Age=0`,
+  ];
 }
 
 function cookie(req: IncomingMessage, want: string): string | null {
