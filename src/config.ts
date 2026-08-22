@@ -54,7 +54,12 @@ export interface Config {
 
   triage: {
     enabled: boolean;
+    /** Which thing reads the reports. See models.ts. */
+    provider: "anthropic" | "ollama";
     model: string;
+    ollamaUrl: string;
+    keepAlive: string;
+    timeoutMs: number;
     pollMs: number;
     batch: number;
     maxAttempts: number;
@@ -134,13 +139,31 @@ export function loadConfig(): Config {
   }
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const triageEnabled = bool("REPORTS_TRIAGE_ENABLED", Boolean(anthropicKey));
-  if (triageEnabled && !anthropicKey) {
+  const ollamaUrl = process.env.REPORTS_OLLAMA_URL?.trim() || "";
+
+  // A URL is the only thing Ollama needs, so having one is what picks it. The
+  // API needs a key, so having one picks that. Naming the provider outright
+  // wins over both, which is how you point them at the same report to compare.
+  const provider: Config["triage"]["provider"] =
+    (process.env.REPORTS_TRIAGE_PROVIDER?.trim() as Config["triage"]["provider"]) ||
+    (ollamaUrl ? "ollama" : "anthropic");
+
+  const configured = provider === "ollama" ? Boolean(ollamaUrl) : Boolean(anthropicKey);
+  const triageEnabled = bool("REPORTS_TRIAGE_ENABLED", configured);
+
+  if (triageEnabled && !configured) {
     consola.warn(
-      "[config] REPORTS_TRIAGE_ENABLED is on but ANTHROPIC_API_KEY is empty. " +
-        "Reports will queue as pending until a key turns up.",
+      `[config] Triage is on with provider "${provider}" but nothing is ` +
+        "configured for it. Reports will queue as pending until there is.",
     );
   }
+
+  const defaultModel =
+    provider === "ollama"
+      ? // Comfortable next to whatever else is on the card, quick on a 3060,
+        // and the schema is what keeps its answer in shape rather than its size.
+        "qwen3:8b"
+      : "claude-opus-5";
 
   const port = int("PORT", 8080, 1, 65535);
   const adminPort = int("REPORTS_ADMIN_PORT", 8081, 1, 65535);
@@ -190,7 +213,11 @@ export function loadConfig(): Config {
 
     triage: {
       enabled: triageEnabled,
-      model: process.env.REPORTS_TRIAGE_MODEL || "claude-opus-5",
+      provider,
+      model: process.env.REPORTS_TRIAGE_MODEL?.trim() || defaultModel,
+      ollamaUrl: ollamaUrl || "http://127.0.0.1:11434",
+      keepAlive: process.env.REPORTS_OLLAMA_KEEP_ALIVE?.trim() || "5m",
+      timeoutMs: int("REPORTS_TRIAGE_TIMEOUT_MS", 120_000, 5_000, 900_000),
       pollMs: int("REPORTS_TRIAGE_POLL_MS", 15_000, 1000, 3_600_000),
       batch: int("REPORTS_TRIAGE_BATCH", 5, 1, 50),
       maxAttempts: int("REPORTS_TRIAGE_MAX_ATTEMPTS", 3, 1, 20),

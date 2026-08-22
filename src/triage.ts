@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import consola from "consola";
 
 import type { Config } from "./config.ts";
@@ -10,6 +9,7 @@ import {
   type ReportRow,
   type TriageResult,
 } from "./db.ts";
+import { modelFor, type TriageModel } from "./models.ts";
 
 /**
  * The verdicts triage may reach.
@@ -117,7 +117,7 @@ function duplicateContext(rows: ReportRow[], excludeId: string): string {
 }
 
 export class Triager {
-  private readonly client: Anthropic;
+  private readonly model: TriageModel;
   private readonly config: Config;
   private readonly onTriaged: (report: ReportRow) => void;
   private timer: NodeJS.Timeout | null = null;
@@ -126,7 +126,7 @@ export class Triager {
   constructor(config: Config, onTriaged: (report: ReportRow) => void) {
     this.config = config;
     this.onTriaged = onTriaged;
-    this.client = new Anthropic();
+    this.model = modelFor(config.triage);
   }
 
   start(): void {
@@ -134,7 +134,7 @@ export class Triager {
       consola.info("[triage] Disabled. Reports will sit unsorted in the inbox.");
       return;
     }
-    consola.info(`[triage] On, using ${this.config.triage.model}`);
+    consola.info(`[triage] On, using ${this.model.name}`);
     this.timer = setInterval(() => void this.tick(), this.config.triage.pollMs);
     this.timer.unref();
     void this.tick();
@@ -182,36 +182,10 @@ export class Triager {
     const recent = recentSummaries(this.config.triage.duplicateWindow);
     const prompt = describe(report) + duplicateContext(recent, report.id);
 
-    const response = await this.client.messages.create({
-      model: this.config.triage.model,
-      max_tokens: 2000,
-      system: SYSTEM,
-      messages: [{ role: "user", content: prompt }],
-      // Sorting one short report is not hard thinking, and the schema does the
-      // rest of the work of keeping the answer in shape.
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: SCHEMA },
-      },
-    });
-
-    // A safety classifier can decline a request outright, and a report full of
-    // abuse is exactly the kind that might trip one. It arrives as a 200 with
-    // no content, so it has to be checked before the content is read. Either
-    // way the report keeps its place in the inbox — it is only left unsorted.
-    if (response.stop_reason === "refusal") {
-      throw new Error(
-        `Refused (${response.stop_details?.category ?? "no category"})`,
-      );
-    }
-
-    const text = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("");
+    const text = await this.model.classify(SYSTEM, prompt, SCHEMA);
 
     if (!text.trim()) {
-      throw new Error(`Empty response (stop_reason ${response.stop_reason})`);
+      throw new Error("The model said nothing");
     }
 
     const parsed = JSON.parse(text) as {
@@ -228,9 +202,13 @@ export class Triager {
       priority: parsed.priority,
       summary: parsed.summary,
       area: parsed.area,
-      duplicateOf: parsed.duplicate_of,
+      // A nullable type in a JSON schema is not something every local runtime
+      // converts to a grammar cleanly, and the ones that struggle answer with
+      // an empty string. Same meaning, so treat it as one rather than storing
+      // "" as though it named a report.
+      duplicateOf: parsed.duplicate_of?.trim() ? parsed.duplicate_of : null,
       reasoning: parsed.reasoning,
-      model: this.config.triage.model,
+      model: this.model.name,
     };
   }
 }

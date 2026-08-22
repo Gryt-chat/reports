@@ -170,8 +170,26 @@ The last one turns off a whole client and exists for the day a key leaks.
 
 ## Triage
 
-If `ANTHROPIC_API_KEY` is set, every report gets read by Claude within a few
-seconds of arriving. It gives back a verdict (`actionable`, `needs_info`,
+Every report gets read within a few seconds of arriving, by whichever of two
+things is configured.
+
+**On the machine**, through Ollama: set `REPORTS_OLLAMA_URL`. The schema below
+goes across as Ollama's `format`, so the runtime constrains what the model may
+emit rather than the prompt asking it nicely — which is most of why a small
+local model is enough here. It does not have to be good at producing JSON, only
+at deciding what the report is. `qwen3:8b` is the default and shares a 12GB card
+comfortably; `qwen3:14b` judges better and leaves much less room for anything
+else on the GPU.
+
+Ollama has no authentication, so whatever can reach it can use it. It also has
+to be reachable from wherever this container runs, which is rarely localhost.
+
+**Through the API**: set `ANTHROPIC_API_KEY`. Naming `REPORTS_TRIAGE_PROVIDER`
+wins over both, which is how you point them at the same report and compare — and
+`triage_model` records which one sorted it, provider included
+(`ollama:qwen3:8b`), so the answer to "this looks wrong" says what produced it.
+
+Whichever is used, It gives back a verdict (`actionable`, `needs_info`,
 `not_a_bug`, `noise`), a priority, a one-line summary, which part of Gryt it
 probably belongs to, and whether it repeats something already in the inbox.
 
