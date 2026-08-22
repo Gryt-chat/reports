@@ -31,6 +31,8 @@ import {
   type TriageStatus,
 } from "./db.ts";
 import type { Dashboard } from "./dashboard.ts";
+import { type Digest, markPng, sampleWeek, weekFor } from "./digest.ts";
+import { MARK_CID, render as renderDigest } from "./digestMail.ts";
 import { esc, header, HttpError, readBody, sendHtml, sendJson } from "./http.ts";
 import type { TriageModel } from "./models.ts";
 import { createTask, draftTask } from "./task.ts";
@@ -76,6 +78,7 @@ export async function handleAdmin(
   oidc: OidcConfig | null,
   dashboard: Dashboard | null,
   model: TriageModel,
+  digest: Digest,
 ): Promise<void> {
   if (!config.adminToken && !oidc) {
     throw new HttpError(404, "not_found", "Nothing configured to guard the inbox");
@@ -140,7 +143,7 @@ export async function handleAdmin(
   }
 
   if (req.method === "POST") {
-    await handlePost(req, res, path, config, actor, model);
+    await handlePost(req, res, path, config, actor, model, digest);
     return;
   }
 
@@ -177,6 +180,46 @@ export async function handleAdmin(
       version: config.version,
       uptimeSec: Math.round((Date.now() - config.startedAt) / 1000),
     });
+    return;
+  }
+
+  // What this week's digest would say, rendered rather than described. A mail
+  // template nobody can look at without waiting for a Monday is a mail template
+  // that ships wrong.
+  if (path === "/admin/digest/mark.png") {
+    const mark = markPng();
+    if (!mark) throw new HttpError(404, "not_found", "No mark on disk");
+    res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" });
+    res.end(mark);
+    return;
+  }
+
+  if (path === "/admin/digest/preview") {
+    // Made-up numbers by default, so the preview shows the template rather
+    // than whatever this week happens to hold. `?live=1` for the real thing.
+    const live = url.searchParams.get("live") === "1";
+    const mail = renderDigest(
+      live ? weekFor(new Date()) : sampleWeek(),
+      config.publicUrl,
+    );
+    // `cid:` resolves inside a mail client and nowhere else. Inlined as a data
+    // URI rather than pointed at the route above, because the browser fetches
+    // an <img> without the session and gets a 401 — which renders as the
+    // broken box this preview exists to catch. Everything else is verbatim.
+    const mark = markPng();
+    sendHtml(
+      res,
+      200,
+      mark
+        ? mail.html.replace(
+            `cid:${MARK_CID}`,
+            `data:image/png;base64,${mark.toString("base64")}`,
+          )
+        : mail.html,
+      // Exactly what a mail client would allow this template: its own inline
+      // image and the webfont it links. Nothing else, and only on this route.
+      "default-src 'none'; img-src data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com",
+    );
     return;
   }
 
@@ -247,6 +290,7 @@ async function handlePost(
   config: Config,
   actor: Actor,
   model: TriageModel,
+  digest: Digest,
 ): Promise<void> {
   // The HTML pages post to /admin/reports/…, everything else to
   // /admin/api/reports/…. Same actions, so one route answers both.
@@ -268,8 +312,6 @@ async function handlePost(
     return;
   }
 
-  // Setting a status takes a form post from the detail page and a JSON body
-  // from anything else, so it accepts both rather than having two routes.
   // Ask the model for a task. Creates nothing — see `task.ts`.
   const drafting = path.match(/^\/admin\/api\/reports\/([\w-]+)\/task\/draft$/);
   if (drafting && req.method === "POST") {
@@ -309,6 +351,15 @@ async function handlePost(
     return;
   }
 
+  // Send this week's digest now, to everybody who would get it on the day.
+  if (path === "/admin/api/digest/send" && req.method === "POST") {
+    const result = await digest.sendNow();
+    sendJson(res, 200, result);
+    return;
+  }
+
+  // Setting a status takes a form post from the detail page and a JSON body
+  // from anything else, so it accepts both rather than having two routes.
   const decide = path.match(/^\/admin(?:\/api)?\/reports\/([\w-]+)\/status$/);
   if (decide) {
     const id = decide[1];
@@ -676,7 +727,7 @@ async function returnFromKeycloak(
     return;
   }
 
-  touchAdmin(entry.id, person.subject, person.name, new Date().toISOString());
+  touchAdmin(entry.id, person.subject, person.name, new Date().toISOString(), person.email);
 
   const secure = oidc.redirectUri.startsWith("https://") ? " Secure;" : "";
   res.writeHead(303, {

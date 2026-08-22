@@ -105,6 +105,7 @@ export function initDb(dataDir: string): void {
       identifier    TEXT NOT NULL,
       subject       TEXT,
       name          TEXT,
+      email         TEXT,
       note          TEXT,
       added_at      TEXT NOT NULL,
       added_by      TEXT,
@@ -137,6 +138,22 @@ function migrate(db: DatabaseSync): void {
   const columns = new Set(
     db.prepare("PRAGMA table_info(reports)").all().map((row) => String(row.name)),
   );
+
+  const adminColumns = new Set(
+    db.prepare("PRAGMA table_info(admins)").all().map((row) => String(row.name)),
+  );
+  if (!adminColumns.has("email")) {
+    db.exec("ALTER TABLE admins ADD COLUMN email TEXT");
+    consola.info("[db] Added admins.email");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS digest_runs (
+      sent_at   TEXT NOT NULL,
+      covering  TEXT NOT NULL,
+      sent_to   INTEGER NOT NULL
+    );
+  `);
 
   const additions: [string, string][] = [
     ["status", "TEXT NOT NULL DEFAULT 'new'"],
@@ -620,6 +637,96 @@ export function noiseReportIds(
   return rows.map((r) => String((r as { id: unknown }).id));
 }
 
+/**
+ * How many of each type arrived in a window.
+ *
+ * Two counts rather than a group-by, because a week with no feedback should
+ * report zero rather than leaving the key out — a digest that silently omits
+ * a row reads as a bug in the digest.
+ */
+export function countByTypeBetween(fromIso: string, toIso: string): {
+  bug: number;
+  feedback: number;
+} {
+  const one = (type: string) => {
+    const rows = handle()
+      .prepare(
+        "SELECT COUNT(*) AS n FROM reports WHERE type = ? AND received_at >= ? AND received_at < ?",
+      )
+      .all(type, fromIso, toIso);
+    return Number(rows[0]?.n ?? 0);
+  };
+  return { bug: one("bug"), feedback: one("feedback") };
+}
+
+/** Everything ever taken in, split the way the digest reports it. */
+export function totalsByType(): { bug: number; feedback: number } {
+  const one = (type: string) => {
+    const rows = handle()
+      .prepare("SELECT COUNT(*) AS n FROM reports WHERE type = ?")
+      .all(type);
+    return Number(rows[0]?.n ?? 0);
+  };
+  return { bug: one("bug"), feedback: one("feedback") };
+}
+
+/**
+ * Which app they came from, most first.
+ *
+ * `app_id` is whatever the client put in `X-Gryt-App`, so this is the list the
+ * apps actually name themselves rather than a fixed set — a client nobody has
+ * written yet will appear here on its own, and an app id nobody recognises is
+ * worth seeing rather than bucketing into "other".
+ */
+export function totalsByApp(): { app: string; count: number }[] {
+  const rows = handle()
+    .prepare(
+      "SELECT app_id AS app, COUNT(*) AS n FROM reports GROUP BY app_id ORDER BY n DESC",
+    )
+    .all();
+  return rows.map((r) => ({
+    app: String((r as { app: unknown }).app ?? "unknown"),
+    count: Number((r as { n: unknown }).n ?? 0),
+  }));
+}
+
+/** Everyone on the allowlist who can actually be reached. */
+export function adminEmails(): { name: string; email: string }[] {
+  const rows = rowsAs<AdminRow>(handle().prepare("SELECT * FROM admins").all());
+  const seen = new Set<string>();
+  const out: { name: string; email: string }[] = [];
+
+  for (const row of rows) {
+    // The stored address if they have signed in; otherwise what was typed to
+    // add them, but only when that was an address. Somebody added by username
+    // and never seen is skipped rather than guessed at.
+    const email = row.email ?? (row.identifier.includes("@") ? row.identifier : null);
+    if (!email) continue;
+
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: row.name ?? row.identifier, email });
+  }
+
+  return out;
+}
+
+export function recordDigest(sentAt: string, covering: string, sentTo: number): void {
+  handle()
+    .prepare("INSERT INTO digest_runs (sent_at, covering, sent_to) VALUES (?, ?, ?)")
+    .run(sentAt, covering, sentTo);
+}
+
+/** When the last digest went out, so a restart does not send a second one. */
+export function lastDigestAt(): string | null {
+  const rows = handle()
+    .prepare("SELECT sent_at FROM digest_runs ORDER BY sent_at DESC LIMIT 1")
+    .all();
+  const value = rows[0]?.sent_at;
+  return value ? String(value) : null;
+}
+
 export function recordRateEvent(bucket: string, at: number): void {
   handle().prepare("INSERT INTO rate_events (bucket, at) VALUES (?, ?)").run(bucket, at);
 }
@@ -655,6 +762,8 @@ export interface AdminRow {
   /** The Keycloak user id, once they have signed in at least once. */
   subject: string | null;
   name: string | null;
+  /** Verified at sign-in. Null until they have signed in, or if unverified. */
+  email: string | null;
   note: string | null;
   added_at: string;
   added_by: string | null;
@@ -722,15 +831,33 @@ export function findAdmin(
 }
 
 /** Record that they were here, and pin the entry to their user id. */
+/**
+ * Record who signed in, and where to reach them.
+ *
+ * The email is written here rather than when somebody is added, because that
+ * is the only point it is known to be real: `oidc.ts` discards an address the
+ * identity provider has not verified, and an unverified one in a mailing list
+ * is a bounce at best.
+ *
+ * Null does not overwrite. Somebody whose provider stops returning a verified
+ * address should keep the one they signed in with last, rather than silently
+ * dropping off the digest.
+ */
 export function touchAdmin(
   id: string,
   subject: string,
   name: string,
   at: string,
+  email: string | null = null,
 ): void {
   handle()
-    .prepare("UPDATE admins SET subject = ?, name = ?, last_seen_at = ? WHERE id = ?")
-    .run(subject, name, at, id);
+    .prepare(
+      `UPDATE admins
+          SET subject = ?, name = ?, last_seen_at = ?,
+              email = COALESCE(?, email)
+        WHERE id = ?`,
+    )
+    .run(subject, name, at, email, id);
 }
 
 export interface Stats {

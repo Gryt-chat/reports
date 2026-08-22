@@ -59,13 +59,27 @@ export function sendJson(
   res.end(text);
 }
 
-export function sendHtml(res: ServerResponse, status: number, html: string): void {
+export function sendHtml(
+  res: ServerResponse,
+  status: number,
+  html: string,
+  /**
+   * A looser policy, for the one page that needs one.
+   *
+   * The digest preview renders a mail template, and a mail template has an
+   * inline image and a webfont — both of which `default-src 'none'` refuses,
+   * so the preview showed a broken mark and the wrong typeface. Passed in per
+   * response rather than widened here: the inbox renders text strangers wrote
+   * and its policy should stay as tight as it is.
+   */
+  csp = "default-src 'none'; style-src 'unsafe-inline'",
+): void {
   res.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "content-length": Buffer.byteLength(html),
     // The admin inbox renders text strangers wrote. Nothing on the page needs
     // to load or run anything from anywhere.
-    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
+    "content-security-policy": csp,
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
   });
