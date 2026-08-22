@@ -1,0 +1,142 @@
+import assert from "node:assert/strict";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before, test } from "node:test";
+
+import {
+  calculateJwkThumbprint,
+  exportJWK,
+  generateKeyPair,
+  SignJWT,
+  type JWK,
+} from "jose";
+
+import { checkAppKey, REPORT_AUDIENCE, verifyIdentity } from "./auth.ts";
+import { closeDb, initDb } from "./db.ts";
+import type { HttpError } from "./http.ts";
+
+const keys = new Map([["mobile", "secret-key"]]);
+
+test("app key: the right key gets in", () => {
+  assert.equal(checkAppKey("mobile", "secret-key", keys, false), "mobile");
+});
+
+test("app key: a wrong, missing or unknown one does not", () => {
+  const codes = [
+    [null, "secret-key", "missing_app"],
+    ["mobile", "wrong", "bad_app_key"],
+    ["mobile", null, "bad_app_key"],
+    ["desktop", "secret-key", "unknown_app"],
+    ["Mobile!", "secret-key", "invalid_app"],
+  ] as const;
+
+  for (const [app, key, code] of codes) {
+    assert.throws(
+      () => checkAppKey(app, key, keys, false),
+      (err: HttpError) => err.code === code,
+      `${app}/${key} should be ${code}`,
+    );
+  }
+});
+
+test("app key: unkeyed mode takes whatever app says it is", () => {
+  assert.equal(checkAppKey("cli", null, new Map(), true), "cli");
+  assert.equal(checkAppKey(null, null, new Map(), true), "unknown");
+});
+
+let dir: string;
+
+before(() => {
+  dir = mkdtempSync(join(tmpdir(), "gryt-reports-test-"));
+  initDb(dir);
+});
+
+after(() => closeDb());
+
+interface Signer {
+  privateKey: CryptoKey;
+  publicJwk: JWK;
+  thumbprint: string;
+}
+
+async function makeSigner(): Promise<Signer> {
+  const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+  const publicJwk = await exportJWK(publicKey);
+  return {
+    privateKey,
+    publicJwk,
+    thumbprint: await calculateJwkThumbprint(publicJwk, "sha256"),
+  };
+}
+
+async function sign(
+  signer: Signer,
+  body: Buffer,
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  return new SignJWT({
+    bh: createHash("sha256").update(body).digest("base64url"),
+    ...overrides,
+  })
+    .setProtectedHeader({ alg: "ES256", jwk: signer.publicJwk })
+    .setSubject(String(overrides.sub ?? signer.thumbprint))
+    .setIssuedAt()
+    .setJti(String(overrides.jti ?? randomUUID()))
+    .setAudience(String(overrides.aud ?? REPORT_AUDIENCE))
+    .setExpirationTime("5m")
+    .sign(signer.privateKey);
+}
+
+test("signature: a report signed by a real key verifies to its thumbprint", async () => {
+  const signer = await makeSigner();
+  const body = Buffer.from(JSON.stringify({ type: "bug", message: "hi" }));
+
+  const identity = await verifyIdentity(await sign(signer, body), body);
+  assert.equal(identity.subject, signer.thumbprint);
+});
+
+test("signature: the same assertion cannot be used twice", async () => {
+  const signer = await makeSigner();
+  const body = Buffer.from("{}");
+  const token = await sign(signer, body);
+
+  await verifyIdentity(token, body);
+  await assert.rejects(
+    () => verifyIdentity(token, body),
+    (err: HttpError) => err.code === "replayed_assertion",
+  );
+});
+
+test("signature: it is bound to the body it was signed over", async () => {
+  const signer = await makeSigner();
+  const token = await sign(signer, Buffer.from('{"message":"one"}'));
+
+  await assert.rejects(
+    () => verifyIdentity(token, Buffer.from('{"message":"two"}')),
+    (err: HttpError) => err.code === "bad_signature",
+  );
+});
+
+test("signature: a subject that is not the key's thumbprint is refused", async () => {
+  const signer = await makeSigner();
+  const body = Buffer.from("{}");
+  const token = await sign(signer, body, { sub: "somebody-elses-id" });
+
+  await assert.rejects(
+    () => verifyIdentity(token, body),
+    (err: HttpError) => err.code === "bad_signature",
+  );
+});
+
+test("signature: an assertion made for something else does not work here", async () => {
+  const signer = await makeSigner();
+  const body = Buffer.from("{}");
+  const token = await sign(signer, body, { aud: "gryt:server" });
+
+  await assert.rejects(
+    () => verifyIdentity(token, body),
+    (err: HttpError) => err.code === "bad_signature",
+  );
+});
