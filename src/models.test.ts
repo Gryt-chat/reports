@@ -32,6 +32,7 @@ function config(overrides: Partial<ModelConfig> = {}): ModelConfig {
     ollamaUrl: url,
     keepAlive: "5m",
     timeoutMs: 2000,
+    think: false,
     ...overrides,
   };
 }
@@ -43,8 +44,21 @@ before(async () => {
     req.on("end", () => {
       lastRequest = JSON.parse(body || "{}") as Record<string, unknown>;
       setTimeout(() => {
-        res.writeHead(reply.status, { "content-type": "application/json" });
-        res.end(JSON.stringify(reply.body));
+        if (reply.status !== 200) {
+          res.writeHead(reply.status, { "content-type": "application/json" });
+          res.end(JSON.stringify(reply.body));
+          return;
+        }
+
+        // Ollama streams one JSON object per line. Splitting the answer across
+        // frames is the point — a reader that assumes one frame works against
+        // a fast model and fails against a slow one.
+        const content = (reply.body as { message?: { content?: string } }).message?.content ?? "";
+        res.writeHead(200, { "content-type": "application/x-ndjson" });
+        for (const piece of content.match(/[\s\S]{1,7}/g) ?? []) {
+          res.write(JSON.stringify({ message: { content: piece }, done: false }) + "\n");
+        }
+        res.end(JSON.stringify({ message: { content: "" }, done: true }) + "\n");
       }, delayMs);
     });
   });
@@ -63,7 +77,9 @@ test("asks Ollama the way Ollama expects to be asked", async () => {
   assert.equal(answer, '{"verdict":"actionable"}');
 
   assert.equal(lastRequest?.model, "qwen3:8b");
-  assert.equal(lastRequest?.stream, false);
+  // Streamed, so Node's five-minute header deadline cannot kill a slow model.
+  assert.equal(lastRequest?.stream, true);
+  assert.equal(lastRequest?.think, false);
   assert.equal(lastRequest?.keep_alive, "5m");
   // The schema goes across as the format. Without this the model is free to
   // answer in prose and every report fails to parse.
@@ -122,4 +138,25 @@ test("the provider is part of what gets recorded", () => {
     modelFor(config({ provider: "anthropic", model: "claude-opus-5" })).name,
     "anthropic:claude-opus-5",
   );
+});
+
+test("an error mid-stream is an error, not a truncated verdict", async () => {
+  reply = { status: 200, body: { message: { content: "" } } };
+  const original = ollama.listeners("request")[0];
+  ollama.removeAllListeners("request");
+  ollama.on("request", (_req, res) => {
+    res.writeHead(200, { "content-type": "application/x-ndjson" });
+    res.write(JSON.stringify({ message: { content: '{"verd' } }) + "\n");
+    res.end(JSON.stringify({ error: "model runner has stopped" }) + "\n");
+  });
+
+  try {
+    await assert.rejects(
+      () => modelFor(config()).classify("s", "p", SCHEMA),
+      /model runner has stopped/,
+    );
+  } finally {
+    ollama.removeAllListeners("request");
+    ollama.on("request", original as never);
+  }
 });

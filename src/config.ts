@@ -67,6 +67,7 @@ export interface Config {
     ollamaUrl: string;
     keepAlive: string;
     timeoutMs: number;
+    think: boolean;
     pollMs: number;
     batch: number;
     maxAttempts: number;
@@ -226,6 +227,10 @@ export function loadConfig(): Config {
       ollamaUrl: ollamaUrl || "http://127.0.0.1:11434",
       keepAlive: process.env.REPORTS_OLLAMA_KEEP_ALIVE?.trim() || "5m",
       timeoutMs: int("REPORTS_TRIAGE_TIMEOUT_MS", 120_000, 5_000, 900_000),
+      // Off, because sorting a report into four fields is not a problem to
+      // reason through, and on a model running half in RAM the reasoning is
+      // most of the wall clock. Turn it on to trade minutes for judgement.
+      think: bool("REPORTS_TRIAGE_THINK", false),
       pollMs: int("REPORTS_TRIAGE_POLL_MS", 15_000, 1000, 3_600_000),
       batch: int("REPORTS_TRIAGE_BATCH", 5, 1, 50),
       maxAttempts: int("REPORTS_TRIAGE_MAX_ATTEMPTS", 3, 1, 20),
