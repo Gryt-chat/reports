@@ -18,6 +18,20 @@ export const REPORT_AUDIENCE = "gryt:reports";
 const MAX_ASSERTION_AGE = "5m";
 
 /**
+ * How wrong a phone's clock may be.
+ *
+ * Without this, an `iat` one second in the future is refused outright, and a
+ * handset thirty seconds fast is ordinary rather than suspicious. The cost of
+ * being strict is not a rejected signature — the client sends the assertion
+ * whenever it can build one, so a refusal loses the whole report, from exactly
+ * the person who was trying to say something is broken.
+ *
+ * A minute either way buys nothing for anyone attacking this: the assertion is
+ * still bound to one body and its `jti` is still good once.
+ */
+const CLOCK_TOLERANCE = "60s";
+
+/**
  * Which app is submitting, and whether it proved it.
  *
  * The key is a shared secret shipped inside a client binary, which is friction
@@ -98,6 +112,7 @@ export async function verifyIdentity(
       algorithms: ["ES256"],
       audience: REPORT_AUDIENCE,
       maxTokenAge: MAX_ASSERTION_AGE,
+      clockTolerance: CLOCK_TOLERANCE,
       requiredClaims: ["sub", "jti", "iat", "exp"],
     }));
   } catch (err) {
