@@ -218,7 +218,7 @@ is text strangers wrote. The same data is available as JSON:
 GET  /admin/api/reports?shelf=open&type=bug&verdict=actionable&status=resolved&triage=pending&q=voice&page=2
 GET  /admin/api/reports/<id>
 GET  /admin/api/stats
-POST /admin/api/reports/<id>/status   {"status":"resolved","note":"GRYT-512"}
+POST /admin/api/reports/<id>/status   {"status":"resolved","note":"GRYT-506"}
 POST /admin/api/reports/<id>/retriage
 GET  /admin/api/bans
 POST /admin/api/bans                  {"kind":"install","value":"…","reason":"…","expiresAt":null}
