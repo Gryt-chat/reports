@@ -1,4 +1,10 @@
-import { countRateEvents, findBan, pruneRateEvents, recordRateEvent } from "./db.ts";
+import {
+  type BanRow,
+  countRateEvents,
+  findBan,
+  pruneRateEvents,
+  recordRateEvent,
+} from "./db.ts";
 import { HttpError } from "./http.ts";
 
 const MINUTE = 60_000;
@@ -13,6 +19,7 @@ export interface Submitter {
 }
 
 export interface LimitConfig {
+  minIntervalSec: number;
   perMinute: number;
   perHourPerIp: number;
   perHourPerInstall: number;
@@ -20,7 +27,7 @@ export interface LimitConfig {
 }
 
 /**
- * Refuse a submitter who is banned.
+ * The ban covering this submitter, if there is one.
  *
  * Four kinds, because the useful one depends on what you know. An IP is what
  * you always have and the weakest — it moves. An install id is stable until
@@ -28,8 +35,11 @@ export interface LimitConfig {
  * the closest thing here to banning a person. An app id is the blunt one: it
  * turns off a whole client, and exists for the day a key leaks and the endpoint
  * is being hammered through it.
+ *
+ * Returns rather than throws, because a banned submitter is not told. See
+ * `ingest`.
  */
-export function assertNotBanned(who: Submitter, nowIso: string): void {
+export function banFor(who: Submitter, nowIso: string): BanRow | null {
   const targets: [Parameters<typeof findBan>[0], string | null][] = [
     ["ip", who.ip],
     ["install", who.installId],
@@ -40,12 +50,33 @@ export function assertNotBanned(who: Submitter, nowIso: string): void {
   for (const [kind, value] of targets) {
     if (!value) continue;
     const ban = findBan(kind, value, nowIso);
-    if (ban) {
-      // The reason is deliberately not returned. Someone working out which of
-      // their identifiers is banned is someone working out which one to change.
-      throw new HttpError(403, "banned", "This client may not submit reports");
-    }
+    if (ban) return ban;
   }
+
+  return null;
+}
+
+/**
+ * Count an attempt that a ban swallowed.
+ *
+ * Without this a ban is completely silent in both directions: the person
+ * hitting it cannot tell, and neither can you. The inbox reads this back so a
+ * ban can say whether it is still absorbing anything, which is the difference
+ * between one that worked and one that is now just sitting there.
+ *
+ * Pruned with the other rate events after a day, so it answers "recently"
+ * rather than "ever", which is the more useful question anyway.
+ */
+export function recordBlocked(who: Submitter, ban: BanRow, now: number): void {
+  recordRateEvent(`blocked:${ban.id}`, now);
+  // Also against the ordinary buckets, so somebody who is banned and switches
+  // networks arrives having already spent part of their new address's budget.
+  recordSubmission(who, now);
+}
+
+/** How many attempts this ban has swallowed in the last day. */
+export function blockedCount(banId: string, now: number): number {
+  return countRateEvents(`blocked:${banId}`, now - DAY);
 }
 
 interface Window {
@@ -63,11 +94,25 @@ function bucketsFor(who: Submitter): string[] {
 }
 
 function windows(who: Submitter, limits: LimitConfig): Window[] {
-  const list: Window[] = [
+  const list: Window[] = [];
+
+  // First in the list, so a script in a loop trips this one rather than an
+  // hourly counter — the answer it gets back is ten seconds, which is true and
+  // is the one a person filing a second report can act on. Applied to every
+  // identifier rather than only the address, or rotating networks would shed
+  // it along with everything else.
+  if (limits.minIntervalSec > 0) {
+    const gap = limits.minIntervalSec * 1000;
+    for (const bucket of bucketsFor(who)) {
+      list.push({ bucket, windowMs: gap, max: 1 });
+    }
+  }
+
+  list.push(
     { bucket: `ip:${who.ip}`, windowMs: MINUTE, max: limits.perMinute },
     { bucket: `ip:${who.ip}`, windowMs: HOUR, max: limits.perHourPerIp },
     { bucket: `ip:${who.ip}`, windowMs: DAY, max: limits.perDayPerIp },
-  ];
+  );
 
   if (who.installId) {
     list.push({

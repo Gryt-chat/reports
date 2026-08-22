@@ -130,18 +130,29 @@ handing out.
 | `202` | Stored. Body is `{ id, receivedAt }`. |
 | `400` | `invalid_json`, `invalid_body`, `invalid_type`, `empty_message`. |
 | `401` | `missing_app`, `bad_app_key`, `bad_signature`, `replayed_assertion`, `signature_required`. A wrong key and an app nobody configured answer the same, so the difference cannot be used to learn which apps exist. |
-| `403` | `banned`, or `origin_not_allowed`. Neither says which. |
+| `403` | `origin_not_allowed`. Does not say which origin was expected. |
 | `413` | `body_too_large`. |
 | `429` | `rate_limited`, with `Retry-After`. |
 
+A banned submitter is the one case where the status is a lie: they get the same
+`202` and the same shape of id as anybody else, and nothing is stored. See
+below.
+
 ## Keeping the junk out
 
-**The app key is friction, not authentication.** Every client ships one and
-sends it as `X-Gryt-App-Key`, one key per app so a leaked key can be rotated
-without shipping the others. Anyone can pull it out of an app bundle or read one
-request in a proxy. What it buys is that a scanner finding an open POST endpoint
-cannot fill the table overnight — real, and worth having, and not a defence
-against somebody who wants to spam this specifically.
+**The app key is off, and that is a decision rather than an omission.** The
+service still takes an `X-Gryt-App-Key`, one key per app, and on a deployment
+that configures `REPORTS_APP_KEYS` it is required. The deployment behind
+`reports.gryt.chat` does not, because a key that ships inside a public app is
+not a secret — anyone can pull it out of a bundle or read one request in a
+proxy — and the day it has to be rotated is the day everybody who has not
+updated their app stops being able to report a bug. That is the failure this
+service exists to avoid, traded for friction that stops a scanner and nobody
+else.
+
+What holds the line instead: a minimum gap between requests, counters per
+address and per install, a ban list, and a triage pass that bans whoever keeps
+sending junk.
 
 **The signature is what actually authenticates, and it is optional until every
 client sends one.** Every Gryt client already holds an identity keypair, and
@@ -176,13 +187,44 @@ a check every client has to pass. It exists for one case: a page on the open web
 making somebody's browser file reports. CORS already stops that page reading the
 answer; without this the report lands in the table anyway.
 
-**Rate limits** are counted per IP, per install id and per identity key, in
-SQLite rather than in memory, so restarting the service is not a way to clear
-your limit. The address they are counted against comes from a header when
+**Rate limits** start with `REPORTS_MIN_INTERVAL_SEC`, the shortest gap between
+one client's reports. It is the cheapest check here and the one that does the
+most: a script posting in a loop is stopped by its second request, before any
+hourly counter has noticed. It answers honestly, with the real wait in
+`Retry-After`, because somebody filing a second genuine report ten seconds after
+the first is the ordinary case and should be told to wait rather than have it
+vanish.
+
+The rest are counted per IP, per install id and per identity key, in SQLite
+rather than in memory, so restarting the service is not a way to clear your
+limit. The address they are counted against comes from a header when
 `REPORTS_TRUST_PROXY` is on, so `REPORTS_TRUSTED_PROXIES` decides whose header
 to believe — without it, anything that can reach the port directly can name its
-own address and skip both the limits and the bans. **Bans** come in four kinds: `ip`, `install`, `subject` and `app`.
-The last one turns off a whole client and exists for the day a key leaks.
+own address and skip both the limits and the bans.
+
+**Bans** come in four kinds: `ip`, `install`, `subject` and `app`. The last one
+turns off a whole client and exists for the day a key leaks.
+
+**A banned submitter is thanked and ignored.** They get the same `202` and the
+same shape of id as an accepted report, and nothing is stored. The `403` this
+used to answer with told somebody they had been banned, which is the one piece
+of information that makes a ban worth working around: it names the identifier to
+change and it says so after every attempt, which is a free oracle for finding
+one that still works. The attempt is counted against the ban, so
+`GET /admin/api/bans` can say how many each has swallowed in the last day —
+without that the ban is silent in both directions, and you cannot tell a ban
+that is still working from one that is just sitting there.
+
+**Triage bans whoever keeps sending junk.** `REPORTS_AUTO_BAN_NOISE` reports the
+model called `noise` within `REPORTS_AUTO_BAN_WINDOW_H` earns a ban lasting
+`REPORTS_AUTO_BAN_DAYS`, on the identity thumbprint where there is one and the
+address otherwise. **Only `noise` counts** — empty submissions, test posts, spam,
+nothing to do with Gryt. `not_a_bug` deliberately does not: that verdict means a
+feature request or a support question, and somebody who sends three of those is
+the most engaged person using Gryt rather than an abuser. The ban expires, and
+its reason names the reports behind it so it can be checked and lifted from the
+inbox rather than taken on trust — it is the one place here where a model's
+answer takes an action rather than sorting a queue.
 
 ## Triage
 

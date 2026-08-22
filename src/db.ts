@@ -558,6 +558,47 @@ export function findBan(kind: BanKind, value: string, nowIso: string): BanRow | 
   return rows[0] ?? null;
 }
 
+/**
+ * How many reports from this submitter triage called `noise` lately.
+ *
+ * `identity_subject` first, `ip` second, because the subject survives a change
+ * of network and an address does not. Counted from `received_at` rather than
+ * from when triage ran: somebody who posts ten things in a minute and is
+ * triaged an hour later should count as ten in that minute.
+ */
+export function countNoiseFrom(
+  kind: "subject" | "ip",
+  value: string,
+  sinceIso: string,
+): number {
+  const column = kind === "subject" ? "identity_subject" : "ip";
+  const rows = handle()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM reports
+        WHERE ${column} = ? AND triage_verdict = 'noise' AND received_at >= ?`,
+    )
+    .all(value, sinceIso);
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** The report ids behind that count, for a ban reason somebody can check. */
+export function noiseReportIds(
+  kind: "subject" | "ip",
+  value: string,
+  sinceIso: string,
+  limit: number,
+): string[] {
+  const column = kind === "subject" ? "identity_subject" : "ip";
+  const rows = handle()
+    .prepare(
+      `SELECT id FROM reports
+        WHERE ${column} = ? AND triage_verdict = 'noise' AND received_at >= ?
+        ORDER BY received_at DESC LIMIT ?`,
+    )
+    .all(value, sinceIso, limit);
+  return rows.map((r) => String((r as { id: unknown }).id));
+}
+
 export function recordRateEvent(bucket: string, at: number): void {
   handle().prepare("INSERT INTO rate_events (bucket, at) VALUES (?, ?)").run(bucket, at);
 }

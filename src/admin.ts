@@ -31,6 +31,7 @@ import {
 } from "./db.ts";
 import type { Dashboard } from "./dashboard.ts";
 import { esc, header, HttpError, readBody, sendHtml, sendJson } from "./http.ts";
+import { blockedCount } from "./limits.ts";
 import {
   completeLogin,
   readSession,
@@ -176,7 +177,15 @@ export async function handleAdmin(
   }
 
   if (path === "/admin/api/bans") {
-    sendJson(res, 200, { bans: listBans() });
+    // `blocked` is how many attempts each ban has swallowed in the last day.
+    // Without it a ban is silent in both directions — the person hitting it is
+    // told nothing, by design, and so is everybody else. This is the
+    // difference between a ban that is still doing work and one that is just
+    // sitting there.
+    const now = Date.now();
+    sendJson(res, 200, {
+      bans: listBans().map((ban) => ({ ...ban, blocked: blockedCount(ban.id, now) })),
+    });
     return;
   }
 
