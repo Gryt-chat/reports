@@ -379,6 +379,145 @@ function markReadFor(path: string): void {
   }
 }
 
+/* Hallmark · page: no-access · genre: modern-minimal · nav: none · footer: none
+ * tone: utilitarian · enrichment: none (typography only) · motion: none
+ * theme: Gryt dark, copied — see the token block below for why
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ */
+
+/**
+ * What somebody sees when their Gryt account is not on the list.
+ *
+ * It says one thing and offers one action. There is nothing to appeal to here
+ * and nobody reading a form, so it does not apologise: an apology invites a
+ * reply that has nowhere to go.
+ *
+ * It does not print their user id. The earlier version did, on the theory that
+ * they could send it to somebody and be added — but the list takes an email or
+ * a username, so the id was never needed, and handing an identifier to somebody
+ * who was just turned away is giving away the one thing they did not have.
+ *
+ * Self-contained on purpose. The person seeing it has no session, so it cannot
+ * load the dashboard's stylesheet or its fonts — those are behind the same
+ * check that produced this page. Hence a local copy of Gryt's dark palette
+ * rather than the usual aliases onto --gryt-*, and a system font stack.
+ */
+function deniedPage(name: string): string {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>No access</title>
+<style>
+  :root {
+    --color-paper: #111318;
+    --color-paper-2: #1a1d24;
+    --color-rule: #2b303d;
+    --color-ink: #e0e0e6;
+    /* A step lighter than the library's muted, which lands at 4.4:1 on this
+       paper. This page is four lines long and every one of them has to be
+       readable by somebody who is already annoyed. */
+    --color-ink-2: #9a9aa4;
+    --color-accent: #968ff8;
+    --color-accent-light: #b4afff;
+
+    --space-xs: 0.5rem;
+    --space-sm: 0.75rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-display: clamp(1.5rem, 3vw + 0.75rem, 2rem);
+    --tracking-display: -0.022em;
+
+    --radius-md: 0.5rem;
+    --radius-full: 999px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; overflow-x: clip; }
+
+  body {
+    align-items: center;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    display: flex;
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    justify-content: center;
+    line-height: 1.6;
+    min-height: 100dvh;
+    padding: var(--space-lg);
+  }
+
+  main { max-width: 32rem; }
+
+  h1 {
+    font-size: var(--text-display);
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: var(--tracking-display);
+    margin: 0 0 var(--space-md);
+    overflow-wrap: anywhere;
+  }
+
+  p { margin: 0 0 var(--space-md); }
+
+  .who {
+    background: var(--color-paper-2);
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-md);
+    color: var(--color-ink-2);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-lg);
+    overflow-wrap: anywhere;
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .who strong { color: var(--color-ink); font-weight: 600; }
+
+  .next { color: var(--color-ink-2); font-size: var(--text-sm); }
+
+  a.action {
+    background: var(--color-accent);
+    border-radius: var(--radius-full);
+    color: var(--color-paper);
+    display: inline-block;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding: var(--space-xs) var(--space-lg);
+    text-decoration: none;
+    transition: background 120ms var(--ease-out);
+  }
+
+  a.action:hover { background: var(--color-accent-light); }
+  a.action:active { background: var(--color-accent-light); }
+
+  a.action:focus-visible {
+    outline: 2px solid var(--color-accent-light);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    a.action { transition: none; }
+  }
+</style></head>
+<body>
+  <main>
+    <h1>You don't have access to this inbox</h1>
+    <p class="who">Signed in as <strong>${esc(name)}</strong></p>
+    <p>The account is real. It is just not one of the few that can read what
+    people report from inside Gryt.</p>
+    <p class="next">If it should be, ask whoever runs this to add you.</p>
+    <p><a class="action" href="/admin/logout">Sign in as somebody else</a></p>
+  </main>
+</body></html>`;
+}
+
 function cookie(req: IncomingMessage, want: string): string | null {
   const cookies = header(req, "cookie") ?? "";
   for (const pair of cookies.split(";")) {
@@ -464,16 +603,7 @@ async function returnFromKeycloak(
       "content-type": "text/html; charset=utf-8",
       "set-cookie": clearLogin,
     });
-    res.end(
-      page(
-        "No access",
-        `<h1>No access</h1>
-         <p>You are signed in as ${esc(person.name)}, and that account is not on
-         the list for this inbox.</p>
-         <p class="muted">Somebody already on it can add you. Your user id is
-         <code>${esc(person.subject)}</code>.</p>`,
-      ),
-    );
+    res.end(deniedPage(person.name));
     return;
   }
 
