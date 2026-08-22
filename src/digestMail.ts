@@ -55,8 +55,6 @@ export interface Week {
   to: string;
   bug: number;
   feedback: number;
-  previousBug: number;
-  previousFeedback: number;
   openNow: number;
   /** Everything ever taken in, split the same way. */
   totalBug: number;
@@ -78,11 +76,6 @@ const ACCENT = "#968ff8";
 const ON_ACCENT = "#0c0a20";
 const SECONDARY = "#7dd3fc";
 const SUCCESS = "#4ade80";
-/* The badge. A tint of the success green rather than the green itself: solid
-   #4ade80 with dark text on it reads as a status chip for something that
-   succeeded, and this is a count that went up. */
-const SUCCESS_BG = "#e7f8ee";
-const SUCCESS_INK = "#1a7f4b";
 const WARNING = "#fbbf24";
 
 /**
@@ -135,26 +128,6 @@ export function range(fromIso: string, toIso: string): string {
     : `${from.getDate()} ${month(from)} – ${to.getDate()} ${month(to)} ${to.getFullYear()}`;
 }
 
-/**
- * The change since last week, as a badge.
- *
- * **A quieter week is never a negative number.** "−2" reads as two of
- * something lost, and nothing was lost: two fewer people wrote in. The badge
- * exists to say how much arrived, and a minus sign cannot say that. A week
- * that is down states last week's figure instead — same comparison, and the
- * reader does the subtraction only if they care about it.
- *
- * **Green for up, neutral for everything else — not red.** Green-for-up is
- * conventional and asked for, but the usual green/red pair says good/bad, and
- * a week with fewer bug reports in it is not an error.
- */
-export function movement(now: number, before: number): { label: string; up: boolean } {
-  const diff = now - before;
-  if (diff === 0) return { label: now === 0 ? "none last week either" : "same as last week", up: false };
-  if (diff > 0) return { label: `+${diff}`, up: true };
-  return { label: `${before} last week`, up: false };
-}
-
 /** The news, as a sentence rather than a dashboard. */
 export function headline(bug: number, feedback: number): string {
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -176,33 +149,20 @@ function esc(value: string): string {
  * One figure, laid out the way the inbox lays out a report: the number in a
  * narrow left column, the label beside it. Not a tile — tiles imply the two
  * are independent measurements, and the row below adds them together.
+ *
+ * There used to be a second line under the label carrying the change since the
+ * previous week. It is gone: the digest says what arrived, and a reader who
+ * wants to know whether that is more or less than last time has last week's
+ * mail. Without it the label is a single line, so it centres against the
+ * figure rather than sitting at its top.
  */
-function row(
-  count: number,
-  label: string,
-  change: { label: string; up: boolean },
-  last: boolean,
-): string {
-  // A word gets no pill; a number does. "+8" is a badge and "same as last
-  // week" is a sentence, and setting a sentence in a pill makes it a button.
-  const isBadge = /^[+\u2212]/.test(change.label);
-  const badge = isBadge
-    ? `<span style="display:inline-block;background:${SUCCESS_BG};color:${
-        change.up ? SUCCESS_INK : MUTED
-      };font:700 12px/16px ${FONT};padding:2px 8px;border-radius:${R_FULL};" class="${
-        change.up ? "up" : "ink-soft"
-      }">${esc(change.label)}</span>`
-    : `<span class="ink-soft" style="font:400 13px/1.5 ${FONT};color:${MUTED};">${esc(change.label)}</span>`;
-
+function row(count: number, label: string, last: boolean): string {
   return `
       <tr>
-        <td width="56" valign="top" align="left" class="ink" style="width:56px;padding:${
+        <td width="56" valign="middle" align="left" class="ink" style="width:56px;padding:${
           last ? "14px 0 0 0" : "14px 0"
         };font:700 30px/1 ${FONT};color:${TEXT};letter-spacing:-0.02em;">${count}</td>
-        <td valign="top" class="ink" style="padding:${last ? "16px 0 0 0" : "16px 0"};font:400 15px/1.35 ${FONT};color:${TEXT};">
-          ${esc(label)}<br>
-          <span style="display:inline-block;padding-top:3px;">${badge}</span>
-        </td>
+        <td valign="middle" class="ink" style="padding:${last ? "14px 0 0 0" : "14px 0"};font:400 15px/1.35 ${FONT};color:${TEXT};">${esc(label)}</td>
       </tr>`;
 }
 
@@ -274,8 +234,8 @@ export function render(week: Week, publicUrl: string | null): {
     "",
     lead,
     "",
-    `Bugs: ${week.bug} (${movement(week.bug, week.previousBug).label})`,
-    `Feedback: ${week.feedback} (${movement(week.feedback, week.previousFeedback).label})`,
+    `Bugs: ${week.bug}`,
+    `Feedback: ${week.feedback}`,
     `Total: ${total} this week; ${week.totalBug} bugs and ${week.totalFeedback} feedback all told`,
     "",
     ...(week.byApp.length
@@ -308,8 +268,6 @@ export function render(week: Week, publicUrl: string | null): {
     .ink { color:#e0e0e6 !important; }
     .ink-soft { color:#888888 !important; }
     .edge { border-color:#2b303d !important; }
-    .up { background:#16311f !important; color:#6fdd9b !important; }
-    .up-flat { background:#1e2028 !important; }
   }
   @media (max-width:479px) {
     .pad { padding-left:20px !important; padding-right:20px !important; }
@@ -340,8 +298,8 @@ export function render(week: Week, publicUrl: string | null): {
     <div class="ink pad" style="font:700 21px/1.35 ${FONT};color:${TEXT};letter-spacing:-0.01em;">${esc(lead)}</div>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;">
-      ${row(week.bug, week.bug === 1 ? "Bug report" : "Bug reports", movement(week.bug, week.previousBug), false)}
-      ${row(week.feedback, "Feedback", movement(week.feedback, week.previousFeedback), true)}
+      ${row(week.bug, week.bug === 1 ? "Bug report" : "Bug reports", false)}
+      ${row(week.feedback, "Feedback", true)}
     </table>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:22px;">

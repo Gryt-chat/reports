@@ -59,22 +59,18 @@ export function markPng(): Buffer | null {
 
 const MARK = markPng();
 
-/** Both weeks' numbers, so the mail can say which way things moved. */
+/** What arrived in the week, and the standing totals it sits against. */
 export function weekFor(now: Date): Week {
   const to = now.toISOString();
   const from = new Date(now.getTime() - WEEK_MS).toISOString();
-  const before = new Date(now.getTime() - 2 * WEEK_MS).toISOString();
 
   const week = countByTypeBetween(from, to);
-  const previous = countByTypeBetween(before, from);
 
   return {
     from,
     to,
     bug: week.bug,
     feedback: week.feedback,
-    previousBug: previous.bug,
-    previousFeedback: previous.feedback,
     openNow: countReports({ shelf: "open" }),
     ...totalsByTypeNamed(),
     byApp: totalsByApp(),
@@ -220,8 +216,6 @@ export function sampleWeek(now = new Date()): Week {
     to: now.toISOString(),
     bug: 23,
     feedback: 9,
-    previousBug: 15,
-    previousFeedback: 11,
     openNow: 46,
     totalBug: 428,
     totalFeedback: 137,

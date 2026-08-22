@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { headline, movement, range, render, type Week } from "./digestMail.ts";
+import { headline, range, render, type Week } from "./digestMail.ts";
 
 const week = (over: Partial<Week> = {}): Week => ({
   from: "2026-08-10T09:00:00.000Z",
   to: "2026-08-17T09:00:00.000Z",
   bug: 3,
   feedback: 2,
-  previousBug: 1,
-  previousFeedback: 2,
   openNow: 4,
   totalBug: 31,
   totalFeedback: 12,
@@ -29,39 +27,23 @@ test("and both when they do not", () => {
   assert.equal(range("2026-07-29T09:00:00Z", "2026-08-05T09:00:00Z"), "29 July – 5 August 2026");
 });
 
-test("movement counts what arrived, and says which way", () => {
-  assert.deepEqual(movement(4, 1), { label: "+3", up: true });
-  assert.deepEqual(movement(2, 2), { label: "same as last week", up: false });
-});
-
-test("a quieter week is never a negative number", () => {
-  // "−2" reads as two of something lost. Nothing was lost; two fewer people
-  // wrote in. The badge says how much arrived, so it states last week instead.
-  assert.deepEqual(movement(1, 4), { label: "4 last week", up: false });
-  assert.deepEqual(movement(0, 3), { label: "3 last week", up: false });
-});
-
-test("no rendering of a week carries a minus sign", () => {
-  const down = render(week({ bug: 1, previousBug: 9, feedback: 0, previousFeedback: 6 }), null);
-  for (const part of [down.html, down.text, down.subject]) {
+test("the digest says what arrived and nothing about last week", () => {
+  // It used to carry the change since the previous week under each count. A
+  // quieter week then read as a loss of something, which is not what a smaller
+  // number of people writing in is.
+  const out = render(week({ bug: 3, feedback: 2 }), null);
+  for (const part of [out.html, out.text, out.subject]) {
+    assert.doesNotMatch(part, /last week/i);
+    assert.doesNotMatch(part, /\+\d/);
     assert.doesNotMatch(part, /[\u2212]/);
-    // A hyphen in front of a digit would read the same way to somebody
-    // skimming, whatever character it is.
     assert.doesNotMatch(part, /(^|\s)-\d/);
   }
 });
 
-test("a fall is not coloured like a failure", () => {
-  // Green-for-up is the convention; red-for-down would say a quieter week is
-  // an error, which it is not.
-  assert.equal(movement(1, 9).up, false);
-  const html = render(week({ bug: 1, previousBug: 9 }), null).html;
-  assert.doesNotMatch(html, /#f87171/); // danger
-});
-
-test("a run of quiet weeks reads as a run", () => {
-  // "Same as last week" is true of zero-to-zero and tells you nothing.
-  assert.equal(movement(0, 0).label, "none last week either");
+test("the text part is the two counts, plainly", () => {
+  const text = render(week({ bug: 3, feedback: 2 }), null).text;
+  assert.match(text, /^Bugs: 3$/m);
+  assert.match(text, /^Feedback: 2$/m);
 });
 
 test("the subject carries the number, so the inbox list is the digest", () => {
@@ -69,7 +51,7 @@ test("the subject carries the number, so the inbox list is the digest", () => {
 });
 
 test("a quiet week says so rather than saying 0", () => {
-  const quiet = render(week({ bug: 0, feedback: 0, previousBug: 0, previousFeedback: 0 }), null);
+  const quiet = render(week({ bug: 0, feedback: 0 }), null);
   assert.match(quiet.subject, /a quiet week/);
 });
 
