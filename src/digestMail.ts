@@ -138,21 +138,21 @@ export function range(fromIso: string, toIso: string): string {
 /**
  * The change since last week, as a badge.
  *
- * **Green for up, neutral for down — not red.** Green-for-up is conventional
- * and asked for, but the usual green/red pair says good/bad, and a week with
- * fewer bug reports in it is not an error. Colouring a drop red would tell the
- * reader something went wrong when the only thing that happened is that fewer
- * people wrote in. So a rise is the success green because it is activity, and
- * a fall is muted because it is just a smaller number.
+ * **A quieter week is never a negative number.** "−2" reads as two of
+ * something lost, and nothing was lost: two fewer people wrote in. The badge
+ * exists to say how much arrived, and a minus sign cannot say that. A week
+ * that is down states last week's figure instead — same comparison, and the
+ * reader does the subtraction only if they care about it.
  *
- * A minus sign, not a hyphen: "−3" is the character for a negative number and
- * "-3" is a word break, which is what a client will use it as.
+ * **Green for up, neutral for everything else — not red.** Green-for-up is
+ * conventional and asked for, but the usual green/red pair says good/bad, and
+ * a week with fewer bug reports in it is not an error.
  */
 export function movement(now: number, before: number): { label: string; up: boolean } {
   const diff = now - before;
   if (diff === 0) return { label: now === 0 ? "none last week either" : "same as last week", up: false };
   if (diff > 0) return { label: `+${diff}`, up: true };
-  return { label: `\u2212${Math.abs(diff)}`, up: false };
+  return { label: `${before} last week`, up: false };
 }
 
 /** The news, as a sentence rather than a dashboard. */
