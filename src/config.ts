@@ -49,6 +49,13 @@ export interface Config {
   };
 
   trustProxy: boolean;
+  /**
+   * The addresses whose forwarding headers are believed.
+   *
+   * Empty means believe any peer, which is only right when nothing but the
+   * proxy can reach the port.
+   */
+  trustedProxies: string[];
 
   adminToken: string | null;
 
@@ -208,6 +215,7 @@ export function loadConfig(): Config {
     },
 
     trustProxy: bool("REPORTS_TRUST_PROXY", true),
+    trustedProxies: list("REPORTS_TRUSTED_PROXIES"),
 
     adminToken,
 

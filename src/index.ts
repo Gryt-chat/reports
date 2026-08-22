@@ -78,6 +78,14 @@ async function main(): Promise<void> {
         config.requireSignature ? "required" : "optional"
       }`,
     );
+
+    if (config.trustProxy && config.trustedProxies.length === 0) {
+      consola.warn(
+        "[reports] Forwarding headers are believed from any peer. Anything " +
+          "that can reach this port directly can name its own address and " +
+          "opt out of every rate limit and ban. Set REPORTS_TRUSTED_PROXIES.",
+      );
+    }
   });
 
   adminServer?.listen(config.adminPort, config.adminHost, () => {
@@ -120,6 +128,16 @@ async function handle(
   }
 
   if (url.pathname === "/" || url.pathname === "/healthz") {
+    // The public answer is that it is alive, and nothing else. The name, the
+    // version and the uptime are the first three things a scan writes down:
+    // together they say which release is running and therefore which fixes are
+    // not in it. The same details are on the inbox listener, where whoever is
+    // asking has signed in and the answer is useful rather than a hint.
+    if (surface === "public") {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     sendJson(res, 200, {
       service: "gryt-reports",
       version: config.version,
@@ -167,6 +185,18 @@ async function ingest(
   config: Config,
   triager: Triager,
 ): Promise<void> {
+  // A browser that was told to post here by somebody else's page.
+  //
+  // Only browsers send an Origin, so this is not a check a native client can
+  // fail — the mobile app sends none and neither does Electron's main process.
+  // What it stops is a page on the open web making somebody's browser file
+  // reports: CORS already stops that page reading the answer, but the report
+  // lands in the table either way, and that is the part worth refusing.
+  const origin = header(req, "origin");
+  if (origin && !config.corsOrigins.includes(origin) && !config.corsOrigins.includes("*")) {
+    throw new HttpError(403, "origin_not_allowed", "Not a place reports come from");
+  }
+
   const raw = await readBody(req, config.maxBodyBytes);
 
   const appId = checkAppKey(
@@ -196,7 +226,7 @@ async function ingest(
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const who: Submitter = {
-    ip: clientIp(req, config.trustProxy),
+    ip: clientIp(req, config.trustProxy, config.trustedProxies),
     appId,
     installId: report.app.installId,
     subject,

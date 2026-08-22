@@ -28,7 +28,9 @@ test("app key: a wrong, missing or unknown one does not", () => {
     [null, "secret-key", "missing_app"],
     ["mobile", "wrong", "bad_app_key"],
     ["mobile", null, "bad_app_key"],
-    ["desktop", "secret-key", "unknown_app"],
+    // An app nobody configured answers the same as a wrong key on purpose.
+    // Two answers would let a stranger learn which app ids exist by asking.
+    ["desktop", "secret-key", "bad_app_key"],
     ["Mobile!", "secret-key", "invalid_app"],
   ] as const;
 

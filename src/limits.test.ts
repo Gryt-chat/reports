@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
+import type { IncomingMessage } from "node:http";
+
 import { addBan, closeDb, initDb } from "./db.ts";
-import type { HttpError } from "./http.ts";
+import { clientIp, type HttpError } from "./http.ts";
 import {
   assertNotBanned,
   assertWithinLimits,
@@ -105,4 +107,27 @@ test("an expired ban is not a ban", () => {
   });
 
   assertNotBanned(submitter({ ip: "198.51.100.200" }), nowIso);
+});
+
+test("a forwarded address is only believed when the proxy is the one asking", () => {
+  // The ingest port is published on the machine's network address, so the
+  // tunnel is not the only thing that can reach it. Anything else that can
+  // will send this header and opt out of every per-address limit and ban.
+  const fromStranger = {
+    socket: { remoteAddress: "192.0.2.50" },
+    headers: { "cf-connecting-ip": "1.2.3.4" },
+  } as unknown as IncomingMessage;
+
+  assert.equal(clientIp(fromStranger, true, ["203.0.113.7"]), "192.0.2.50");
+  assert.equal(clientIp(fromStranger, true, []), "1.2.3.4", "no list means believe anyone");
+
+  const fromProxy = {
+    socket: { remoteAddress: "::ffff:203.0.113.7" },
+    headers: { "cf-connecting-ip": "1.2.3.4" },
+  } as unknown as IncomingMessage;
+
+  // Same machine whether it introduces itself in v4 or v6 form.
+  assert.equal(clientIp(fromProxy, true, ["203.0.113.7"]), "1.2.3.4");
+
+  assert.equal(clientIp(fromProxy, false, []), "::ffff:203.0.113.7", "off means off");
 });

@@ -78,15 +78,6 @@ export async function handleAdmin(
 
   const path = url.pathname.replace(/\/+$/, "") || "/admin";
 
-  // Hashed CSS, JS and fonts, before the auth check. They carry no data — the
-  // shell they belong to is what is guarded, and every route that answers with
-  // anything about a report is behind `authorise` below. Gating them too would
-  // mean the sign-in page could not style itself.
-  if (dashboard?.available && path.startsWith("/admin/assets/") && req.method === "GET") {
-    if (dashboard.asset(res, url.pathname)) return;
-    throw new HttpError(404, "not_found", "No such asset");
-  }
-
   if (oidc) {
     if (path === "/admin/login") {
       await sendToKeycloak(res, oidc);
@@ -142,6 +133,14 @@ export async function handleAdmin(
 
   if (req.method !== "GET") {
     throw new HttpError(405, "method_not_allowed", "GET or POST");
+  }
+
+  // Behind the auth check with everything else. These were served in front of
+  // it on the theory that the sign-in page needed them to style itself — it
+  // does not, because the sign-in page is Keycloak's.
+  if (dashboard?.available && path.startsWith("/admin/assets/")) {
+    if (dashboard.asset(res, url.pathname)) return;
+    throw new HttpError(404, "not_found", "No such asset");
   }
 
   // The dashboard owns the routes a person opens. The plain pages are still

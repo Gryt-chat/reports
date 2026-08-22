@@ -53,6 +53,7 @@ export function sendJson(
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(text),
+    "x-content-type-options": "nosniff",
     ...headers,
   });
   res.end(text);
@@ -79,9 +80,24 @@ export function sendHtml(res: ServerResponse, status: number, html: string): voi
  * front is known to set it, hence REPORTS_TRUST_PROXY. `cf-connecting-ip` is
  * the one Cloudflare sets and strips; the rightmost `x-forwarded-for` entry is
  * the one the nearest proxy appended, which is the only one it can vouch for.
+ *
+ * `trustedProxies` is what decides whether to believe any of it. The ingest
+ * port is published on the machine's network address, so the tunnel is not the
+ * only thing that can reach it — and anything else that can will happily send
+ * `cf-connecting-ip: 1.2.3.4` and opt itself out of every per-address rate
+ * limit and every ban. Listing the proxy means the header is only believed when
+ * the proxy is the one that connected.
  */
-export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
-  if (trustProxy) {
+export function clientIp(
+  req: IncomingMessage,
+  trustProxy: boolean,
+  trustedProxies: string[] = [],
+): string {
+  const peer = req.socket.remoteAddress || "unknown";
+  const fromProxy =
+    trustedProxies.length === 0 || trustedProxies.includes(normaliseIp(peer));
+
+  if (trustProxy && fromProxy) {
     const cf = header(req, "cf-connecting-ip");
     if (cf) return cf;
 
@@ -94,7 +110,12 @@ export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
       if (parts.length > 0) return parts[parts.length - 1];
     }
   }
-  return req.socket.remoteAddress || "unknown";
+  return peer;
+}
+
+/** ::ffff:192.0.2.1 and 192.0.2.1 are the same machine. */
+export function normaliseIp(address: string): string {
+  return address.startsWith("::ffff:") ? address.slice(7) : address;
 }
 
 export function header(req: IncomingMessage, name: string): string | null {

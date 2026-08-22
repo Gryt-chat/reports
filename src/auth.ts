@@ -1,3 +1,4 @@
+import consola from "consola";
 import { createHash } from "node:crypto";
 import { timingSafeEqual } from "node:crypto";
 import { calculateJwkThumbprint, EmbeddedJWK, jwtVerify, type JWK } from "jose";
@@ -44,12 +45,11 @@ export function checkAppKey(
 
   if (allowUnkeyed && keys.size === 0) return appId;
 
+  // One answer for "no such app" and "wrong key", because two answers tell a
+  // stranger which app ids exist. Whoever is holding a real key knows which
+  // one it is; nobody else needs to learn the list by asking.
   const expected = keys.get(appId);
-  if (!expected) {
-    throw new HttpError(401, "unknown_app", `No key configured for app "${appId}"`);
-  }
-
-  if (!appKey || !constantTimeEquals(appKey, expected)) {
+  if (!expected || !appKey || !constantTimeEquals(appKey, expected)) {
     throw new HttpError(401, "bad_app_key", "X-Gryt-App-Key is wrong or missing");
   }
 
@@ -101,11 +101,12 @@ export async function verifyIdentity(
       requiredClaims: ["sub", "jti", "iat", "exp"],
     }));
   } catch (err) {
-    throw new HttpError(
-      401,
-      "bad_signature",
-      `Identity assertion did not verify: ${(err as Error).message}`,
-    );
+    // The library's own message describes how the check works — which expiry
+    // was missed, which claim was wrong — to somebody who has not proved
+    // anything. It goes in the log, where it helps; the answer says the one
+    // thing the caller is entitled to.
+    consola.debug(`[auth] Assertion rejected: ${(err as Error).message}`);
+    throw new HttpError(401, "bad_signature", "Identity assertion did not verify");
   }
 
   const jwk = protectedHeader.jwk as JWK | undefined;
