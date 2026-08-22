@@ -12,6 +12,7 @@ import {
   clientIp,
   header,
   HttpError,
+  isAllowedOrigin,
   readBody,
   sendJson,
 } from "./http.ts";
@@ -140,12 +141,15 @@ async function ingest(
   // A browser that was told to post here by somebody else's page.
   //
   // Only browsers send an Origin, so this is not a check a native client can
-  // fail — the mobile app sends none and neither does Electron's main process.
-  // What it stops is a page on the open web making somebody's browser file
+  // fail — the mobile app sends none. It is not a check the *desktop* app
+  // escapes, though: it serves its own UI over loopback, so its renderer sends
+  // one like any other page. `isAllowedOrigin` is where that is handled.
+  //
+  // What this stops is a page on the open web making somebody's browser file
   // reports: CORS already stops that page reading the answer, but the report
   // lands in the table either way, and that is the part worth refusing.
   const origin = header(req, "origin");
-  if (origin && !config.corsOrigins.includes(origin) && !config.corsOrigins.includes("*")) {
+  if (origin && !isAllowedOrigin(origin, config.corsOrigins)) {
     throw new HttpError(403, "origin_not_allowed", "Not a place reports come from");
   }
 
