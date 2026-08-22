@@ -284,9 +284,13 @@ Nothing else tells anybody a report arrived. The inbox is a page somebody has
 to remember to open, and one nobody is reminded of is one nobody reads — which
 is the same outcome as not having taken the report.
 
-Once a week: how many bugs and how much feedback arrived, each with the change
-since the week before, the totals all told, and which app they came from.
-Everyone on the allowlist with a verified address gets their own copy.
+Once a week: how many bugs and how much feedback arrived, the totals all told,
+and which app they came from. Everyone on the allowlist with a verified address
+gets their own copy.
+
+No comparison to the week before. It used to carry one under each count, which
+made a quieter week read as a loss of something rather than as fewer people
+writing in.
 
 A quiet week still sends. Zero is information — it says the apps are quiet and
 the service is alive. Skipping the send would make "nothing arrived" and "the
