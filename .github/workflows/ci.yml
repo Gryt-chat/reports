@@ -20,6 +20,25 @@ jobs:
       - run: yarn test
       - run: yarn build
 
+  dashboard:
+    name: Dashboard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
+      - run: yarn install --frozen-lockfile
+      # `yarn build` runs tsc first, so this covers typechecking too. The
+      # service can still start without it — a dashboard that does not compile
+      # leaves the plain pages answering rather than taking the inbox down.
+      - run: yarn build
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

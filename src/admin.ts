@@ -29,6 +29,7 @@ import {
   type ReportType,
   type TriageStatus,
 } from "./db.ts";
+import type { Dashboard } from "./dashboard.ts";
 import { esc, header, HttpError, readBody, sendHtml, sendJson } from "./http.ts";
 import {
   completeLogin,
@@ -69,12 +70,22 @@ export async function handleAdmin(
   url: URL,
   config: Config,
   oidc: OidcConfig | null,
+  dashboard: Dashboard | null,
 ): Promise<void> {
   if (!config.adminToken && !oidc) {
     throw new HttpError(404, "not_found", "Nothing configured to guard the inbox");
   }
 
   const path = url.pathname.replace(/\/+$/, "") || "/admin";
+
+  // Hashed CSS, JS and fonts, before the auth check. They carry no data — the
+  // shell they belong to is what is guarded, and every route that answers with
+  // anything about a report is behind `authorise` below. Gating them too would
+  // mean the sign-in page could not style itself.
+  if (dashboard?.available && path.startsWith("/admin/assets/") && req.method === "GET") {
+    if (dashboard.asset(res, url.pathname)) return;
+    throw new HttpError(404, "not_found", "No such asset");
+  }
 
   if (oidc) {
     if (path === "/admin/login") {
@@ -133,6 +144,17 @@ export async function handleAdmin(
     throw new HttpError(405, "method_not_allowed", "GET or POST");
   }
 
+  // The dashboard owns the routes a person opens. The plain pages are still
+  // there under /admin/plain — they are the fallback when a build is broken,
+  // and they cost nothing to keep.
+  const plain = path.startsWith("/admin/plain");
+  if (dashboard?.available && !plain && !path.startsWith("/admin/api")) {
+    if (path === "/admin" || /^\/admin\/(reports\/[\w-]+|people)$/.test(path)) {
+      markReadFor(path);
+      if (dashboard.shell(res)) return;
+    }
+  }
+
   if (path === "/admin/api/stats") {
     sendJson(res, 200, stats());
     return;
@@ -148,7 +170,7 @@ export async function handleAdmin(
     return;
   }
 
-  if (path === "/admin/people") {
+  if (path === "/admin/people" || path === "/admin/plain/people") {
     sendHtml(res, 200, peoplePage(listAdmins(), actor, oidc));
     return;
   }
@@ -170,20 +192,20 @@ export async function handleAdmin(
     return;
   }
 
-  const detail = path.match(/^\/admin\/reports\/([\w-]+)$/);
+  const detail = path.match(/^\/admin(?:\/plain)?\/reports\/([\w-]+)$/);
   if (detail) {
     const report = getReport(detail[1]);
     if (!report) throw new HttpError(404, "not_found", "No such report");
     markRead(report.id, new Date().toISOString());
-    sendHtml(res, 200, detailPage(report, actor));
+    sendHtml(res, 200, detailPage(report, actor, plainBase(path)));
     return;
   }
 
-  if (path === "/admin") {
+  if (path === "/admin" || path === "/admin/plain") {
     const filter = filterFrom(url);
     const offset = offsetFrom(url);
     const rows = listReports({ ...filter, limit: PAGE_SIZE, offset });
-    sendHtml(res, 200, listPage(rows, countReports(filter), url, offset, actor));
+    sendHtml(res, 200, listPage(rows, countReports(filter), url, offset, actor, plainBase(path)));
     return;
   }
 
@@ -348,6 +370,14 @@ async function handlePost(
 
   void config;
   throw new HttpError(404, "not_found", "No such action");
+}
+
+/** Opening a report is what marks it read, dashboard or plain page alike. */
+function markReadFor(path: string): void {
+  const match = path.match(/^\/admin\/reports\/([\w-]+)$/);
+  if (match && getReport(match[1])) {
+    markRead(match[1], new Date().toISOString());
+  }
 }
 
 function cookie(req: IncomingMessage, want: string): string | null {
@@ -572,12 +602,24 @@ function page(title: string, body: string): string {
 <body>${body}</body></html>`;
 }
 
+/**
+ * Which of the two plain surfaces this request came in by.
+ *
+ * `/admin/plain` is the fallback for a broken dashboard build, so its links
+ * have to stay inside it. When the dashboard is not built at all these same
+ * pages answer at `/admin`, and then the links belong there.
+ */
+function plainBase(path: string): string {
+  return path.startsWith("/admin/plain") ? "/admin/plain" : "/admin";
+}
+
 function listPage(
   rows: ReportSummary[],
   total: number,
   url: URL,
   offset: number,
   actor: Actor,
+  base: string,
 ): string {
   const s = stats();
   const links = [
@@ -594,7 +636,7 @@ function listPage(
     ["Closed", "shelf=closed"],
     ["Everything", "shelf=all"],
   ]
-    .map(([label, query]) => `<a href="/admin${query ? `?${query}` : ""}">${esc(label)}</a>`)
+    .map(([label, query]) => `<a href="${base}${query ? `?${query}` : ""}">${esc(label)}</a>`)
     .join("");
 
   const items = rows.length
@@ -615,7 +657,7 @@ function listPage(
 
           const headline = r.triage_summary ?? r.title ?? r.message.slice(0, 120);
 
-          return `<li><a href="/admin/reports/${esc(r.id)}">
+          return `<li><a href="${base}/reports/${esc(r.id)}">
             <div class="row">${tags}<span class="muted">${esc(when)}</span></div>
             <div class="${r.read_at ? "" : "unread"}">${esc(headline)}</div>
             <div class="muted">${esc(r.app_id)} ${esc(r.app_version ?? "?")} · ${esc(
@@ -711,7 +753,7 @@ function statusLabel(status: ReportStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-function detailPage(r: ReportRow, actor: Actor): string {
+function detailPage(r: ReportRow, actor: Actor, base: string): string {
   const payload = JSON.parse(r.payload) as Record<string, unknown>;
 
   const facts: [string, string | null][] = [
@@ -757,7 +799,7 @@ function detailPage(r: ReportRow, actor: Actor): string {
      <p class="muted">${esc(r.id)}</p>
      <pre>${esc(r.message)}</pre>
      <table>${table}</table>
-     <form method="post" action="/admin/reports/${esc(r.id)}/status" class="decide">
+     <form method="post" action="${base}/reports/${esc(r.id)}/status" class="decide">
        <input type="text" name="note" maxlength="500" placeholder="why, or the task it became"
               value="${esc(r.status_note ?? "")}" />
        ${REPORT_STATUSES.filter((status) => status !== r.status)
@@ -768,7 +810,7 @@ function detailPage(r: ReportRow, actor: Actor): string {
          .join("")}
      </form>
      <p>
-       <form method="post" action="/admin/reports/${esc(r.id)}/retriage">
+       <form method="post" action="${base}/reports/${esc(r.id)}/retriage">
          <button type="submit">Triage again</button>
        </form>
      </p>

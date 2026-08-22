@@ -4,6 +4,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 
 import { handleAdmin } from "./admin.ts";
 import { checkAppKey, verifyIdentity } from "./auth.ts";
+import { Dashboard } from "./dashboard.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { closeDb, getReport, initDb, insertReport } from "./db.ts";
 import {
@@ -48,9 +49,10 @@ async function main(): Promise<void> {
   triager.start();
 
   const oidc = oidcFrom(config);
+  const dashboard = new Dashboard(config.uiDir);
 
   const server = http.createServer((req, res) => {
-    void handle(req, res, config, triager, oidc, "public").catch((err) => {
+    void handle(req, res, config, triager, oidc, dashboard, "public").catch((err) => {
       respondToError(res, err);
     });
   });
@@ -59,7 +61,7 @@ async function main(): Promise<void> {
   const adminServer = sameListener
     ? null
     : http.createServer((req, res) => {
-        void handle(req, res, config, triager, oidc, "admin").catch((err) => {
+        void handle(req, res, config, triager, oidc, dashboard, "admin").catch((err) => {
           respondToError(res, err);
         });
       });
@@ -105,6 +107,7 @@ async function handle(
   config: Config,
   triager: Triager,
   oidc: OidcConfig | null,
+  dashboard: Dashboard,
   surface: Surface,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -143,7 +146,7 @@ async function handle(
     if (surface === "public" && config.adminPort !== config.port) {
       throw new HttpError(404, "not_found", "No such endpoint");
     }
-    await handleAdmin(req, res, url, config, oidc);
+    await handleAdmin(req, res, url, config, oidc, dashboard);
     return;
   }
 

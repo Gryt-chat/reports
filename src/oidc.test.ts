@@ -26,6 +26,7 @@ let config: OidcConfig;
 let signingKey: CryptoKey;
 let publicJwk: JWK;
 let lastTokenRequest: URLSearchParams | null = null;
+let emailVerified = true;
 
 before(async () => {
   const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
@@ -62,6 +63,7 @@ before(async () => {
         void new SignJWT({
           preferred_username: "sivert",
           email: "sivert@frifor.app",
+          email_verified: emailVerified,
         })
           .setProtectedHeader({ alg: "RS256", kid: "test" })
           .setIssuer(issuer)
@@ -125,6 +127,19 @@ test("turns a code into the person the realm vouched for", async () => {
   assert.equal(lastTokenRequest?.get("code_verifier"), "the-verifier");
   assert.equal(lastTokenRequest?.get("client_secret"), "shh");
   assert.equal(lastTokenRequest?.get("grant_type"), "authorization_code");
+});
+
+test("an unverified email is treated as no email at all", async () => {
+  // Adding somebody by email is the normal way to use the allowlist, so an
+  // address anybody can type into their own profile must not be a way in.
+  emailVerified = false;
+  try {
+    const person = await completeLogin(config, "code", "verifier");
+    assert.equal(person.subject, "kc-user-1");
+    assert.equal(person.email, null);
+  } finally {
+    emailVerified = true;
+  }
 });
 
 test("a session survives a round trip and nothing else does", () => {
