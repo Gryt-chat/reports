@@ -94,12 +94,19 @@ export class Dashboard {
     res.writeHead(200, {
       "content-type": type,
       "content-length": stat.size,
-      // Vite hashes every asset filename, so these are safe to keep forever.
-      // index.html is not hashed and must never be cached, or a deploy leaves
-      // people on a shell pointing at assets that no longer exist.
+      // `private`, not `public`. Vite hashes every asset filename so a year is
+      // safe in the browser that fetched it — but these sit behind the session
+      // now, and `public` invites every shared cache between here and there to
+      // keep a copy and hand it to whoever asks next. Cloudflare did exactly
+      // that: after the gate went in, the edge kept serving a copy it had
+      // stored while the file was still open, and the origin refusing the
+      // request made no difference to anybody who never reached it.
+      //
+      // index.html is not hashed and must never be stored at all, or a deploy
+      // leaves people on a shell pointing at assets that no longer exist.
       "cache-control": file.endsWith("index.html")
         ? "no-store"
-        : "public, max-age=31536000, immutable",
+        : "private, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
     });
 

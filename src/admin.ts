@@ -117,8 +117,16 @@ export async function handleAdmin(
   const actor = authorise(req, config, oidc);
   if (!actor) {
     // A browser gets sent to sign in. Anything asking for JSON, or holding a
-    // wrong token, gets told plainly rather than handed a redirect to parse.
-    if (oidc && req.method === "GET" && !path.startsWith("/admin/api")) {
+    // wrong token, gets told plainly rather than handed a redirect to parse —
+    // and so does a script or a stylesheet, because a page whose session ran
+    // out would otherwise fetch its assets and be handed the HTML of a login
+    // page with a JavaScript content type.
+    if (
+      oidc &&
+      req.method === "GET" &&
+      !path.startsWith("/admin/api") &&
+      !path.startsWith("/admin/assets")
+    ) {
       res.writeHead(302, { location: "/admin/login" });
       res.end();
       return;

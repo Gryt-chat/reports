@@ -24,6 +24,8 @@ export interface ModelConfig {
   /** How long Ollama keeps the weights resident after a report. */
   keepAlive: string;
   timeoutMs: number;
+  /** Whether a thinking model is allowed to reason before answering. */
+  think: boolean;
 }
 
 class AnthropicModel implements TriageModel {
@@ -78,12 +80,14 @@ class OllamaModel implements TriageModel {
   private readonly model: string;
   private readonly keepAlive: string;
   private readonly timeoutMs: number;
+  private readonly think: boolean;
 
   constructor(config: ModelConfig) {
     this.url = config.ollamaUrl.replace(/\/$/, "");
     this.model = config.model;
     this.keepAlive = config.keepAlive;
     this.timeoutMs = config.timeoutMs;
+    this.think = config.think;
     this.name = `ollama:${config.model}`;
   }
 
@@ -96,9 +100,20 @@ class OllamaModel implements TriageModel {
       signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         model: this.model,
-        stream: false,
+        // Streamed, and not for progress — nobody is watching. Node's HTTP
+        // client gives up if headers do not arrive within five minutes, and a
+        // large model that has to load from disk and then think its way to an
+        // answer takes longer than that on a card it shares. Streaming returns
+        // the headers immediately, so the only deadline left is the one above.
+        stream: true,
         format: schema,
         keep_alive: this.keepAlive,
+        // Thinking models narrate before they answer, and `format` does not
+        // constrain the narration — only the answer. On a model running half
+        // in RAM that reasoning is most of the wall clock, and this is a
+        // four-field classification rather than a problem to work through.
+        // Ignored by models that do not think.
+        think: this.think,
         options: {
           // Classification, not writing. The same report should sort the same
           // way twice.
@@ -116,8 +131,28 @@ class OllamaModel implements TriageModel {
       throw new Error(`Ollama replied ${res.status} ${detail.slice(0, 200)}`);
     }
 
-    const body = (await res.json()) as { message?: { content?: string } };
-    const content = body.message?.content ?? "";
+    if (!res.body) throw new Error("Ollama sent no body");
+
+    // One JSON object per line, each carrying the next fragment of the answer.
+    let content = "";
+    let pending = "";
+
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      pending += new TextDecoder().decode(chunk, { stream: true });
+
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const frame = JSON.parse(line) as {
+          message?: { content?: string };
+          error?: string;
+        };
+        if (frame.error) throw new Error(`Ollama: ${frame.error}`);
+        content += frame.message?.content ?? "";
+      }
+    }
 
     // Belt and braces for a thinking model. `format` should leave no room for
     // one to narrate, and Qwen will do it anyway if the schema is ever dropped.
