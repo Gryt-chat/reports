@@ -17,9 +17,10 @@ import {
   sendJson,
 } from "./http.ts";
 import {
-  assertNotBanned,
   assertWithinLimits,
+  banFor,
   pruneOldEvents,
+  recordBlocked,
   recordSubmission,
   type Submitter,
 } from "./limits.ts";
@@ -188,10 +189,30 @@ async function ingest(
     subject,
   };
 
-  assertNotBanned(who, nowIso);
-  assertWithinLimits(who, config.limits, now);
-
   const id = newReportId(now, randomBytes(4).toString("hex"));
+
+  // A banned submitter is thanked and ignored.
+  //
+  // The 403 this used to return told somebody they had been banned, which is
+  // the one piece of information that makes a ban worth working around: it
+  // says the address or the install they just used is the one to change, and
+  // it says it immediately after each attempt, which is a free oracle for
+  // finding an identifier that still works.
+  //
+  // So the answer is the same 202 and the same shape of id as an accepted
+  // report. Nothing is stored. The attempt is counted, both against the ban —
+  // so the inbox can say whether it is still absorbing anything — and against
+  // the ordinary buckets, so switching networks arrives with part of the new
+  // address's budget already spent.
+  const ban = banFor(who, nowIso);
+  if (ban) {
+    recordBlocked(who, ban, now);
+    consola.info(`[reports] ${ban.kind} ban ${ban.id} swallowed a ${report.type}`);
+    sendJson(res, 202, { id, receivedAt: nowIso });
+    return;
+  }
+
+  assertWithinLimits(who, config.limits, now);
 
   insertReport({
     id,

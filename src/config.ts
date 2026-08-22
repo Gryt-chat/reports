@@ -34,10 +34,42 @@ export interface Config {
 
   /** Reports allowed per window, counted separately per bucket. */
   limits: {
+    /**
+     * The shortest gap between one client's reports.
+     *
+     * The cheapest thing here and the one that does the most: a script posting
+     * in a loop is stopped by the first pair of requests, before any of the
+     * hourly counters have noticed. Short enough that somebody filing a second
+     * genuine report is not really inconvenienced, and unlike the counters
+     * below it answers honestly — see `assertWithinLimits`.
+     */
+    minIntervalSec: number;
     perMinute: number;
     perHourPerIp: number;
     perHourPerInstall: number;
     perDayPerIp: number;
+  };
+
+  /**
+   * Banning whoever keeps sending junk, decided by the triage pass.
+   *
+   * Only the `noise` verdict counts — empty submissions, test posts, spam,
+   * nothing to do with Gryt. `not_a_bug` deliberately does not, because that
+   * verdict means a feature request or a support question, and the person who
+   * sends three of those is the most engaged user Gryt has rather than an
+   * abuser.
+   *
+   * The ban expires. A permanent one taken out by a model on three strikes is
+   * a decision nobody reviews, and the failure is invisible: somebody stops
+   * being able to report bugs and never finds out why.
+   */
+  autoBan: {
+    /** Noise reports before a ban. 0 turns this off. */
+    threshold: number;
+    /** How far back to count them. */
+    windowHours: number;
+    /** How long the ban lasts. */
+    days: number;
   };
 
   trustProxy: boolean;
@@ -186,10 +218,17 @@ export function loadConfig(): Config {
     maxExtraChars: int("REPORTS_MAX_EXTRA_CHARS", 8000, 0, 100_000),
 
     limits: {
+      minIntervalSec: int("REPORTS_MIN_INTERVAL_SEC", 10, 0, 3600),
       perMinute: int("REPORTS_LIMIT_PER_MINUTE", 3, 1, 1000),
       perHourPerIp: int("REPORTS_LIMIT_PER_HOUR_PER_IP", 10, 1, 10_000),
       perHourPerInstall: int("REPORTS_LIMIT_PER_HOUR_PER_INSTALL", 10, 1, 10_000),
       perDayPerIp: int("REPORTS_LIMIT_PER_DAY_PER_IP", 40, 1, 100_000),
+    },
+
+    autoBan: {
+      threshold: int("REPORTS_AUTO_BAN_NOISE", 3, 0, 100),
+      windowHours: int("REPORTS_AUTO_BAN_WINDOW_H", 24, 1, 8760),
+      days: int("REPORTS_AUTO_BAN_DAYS", 7, 1, 3650),
     },
 
     trustProxy: bool("REPORTS_TRUST_PROXY", true),

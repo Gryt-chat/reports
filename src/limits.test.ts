@@ -9,14 +9,19 @@ import type { IncomingMessage } from "node:http";
 import { addBan, closeDb, initDb } from "./db.ts";
 import { clientIp, type HttpError } from "./http.ts";
 import {
-  assertNotBanned,
   assertWithinLimits,
+  banFor,
+  blockedCount,
+  recordBlocked,
   recordSubmission,
   type LimitConfig,
   type Submitter,
 } from "./limits.ts";
 
 const limits: LimitConfig = {
+  // Off in most of these, so the existing windows can be exercised without
+  // every second call tripping the gap instead. Its own test turns it on.
+  minIntervalSec: 0,
   perMinute: 2,
   perHourPerIp: 3,
   perHourPerInstall: 3,
@@ -76,7 +81,7 @@ test("an install id is counted even when the address changes", () => {
   );
 });
 
-test("a ban stops a submitter, and says nothing about which one hit", () => {
+test("a ban is found by any of the submitter's identifiers", () => {
   const nowIso = new Date().toISOString();
   addBan({
     id: "ban_1",
@@ -87,12 +92,75 @@ test("a ban stops a submitter, and says nothing about which one hit", () => {
     expires_at: null,
   });
 
+  const found = banFor(submitter({ installId: "banned-install" }), nowIso);
+  assert.equal(found?.id, "ban_1");
+
+  assert.equal(banFor(submitter({ installId: "some-other-install" }), nowIso), null);
+});
+
+test("a swallowed attempt is counted against the ban and the ordinary buckets", () => {
+  const nowIso = new Date().toISOString();
+  const now = Date.now();
+  addBan({
+    id: "ban_counted",
+    kind: "ip",
+    value: "203.0.113.77",
+    reason: "spam",
+    created_at: nowIso,
+    expires_at: null,
+  });
+
+  const who = submitter({ ip: "203.0.113.77" });
+  const ban = banFor(who, nowIso);
+  assert.ok(ban);
+
+  assert.equal(blockedCount("ban_counted", now), 0);
+  recordBlocked(who, ban, now);
+  recordBlocked(who, ban, now);
+  assert.equal(blockedCount("ban_counted", now), 2);
+
+  // And the address has spent budget it would otherwise arrive with, so
+  // shedding the ban by changing networks does not also reset the counters.
   assert.throws(
-    () => assertNotBanned(submitter({ installId: "banned-install" }), nowIso),
-    (err: HttpError) => err.status === 403 && !err.message.includes("spam"),
+    () => assertWithinLimits(who, limits, now),
+    (err: HttpError) => err.code === "rate_limited",
+  );
+});
+
+test("the minimum gap refuses a second report straight after the first", () => {
+  const gapped: LimitConfig = { ...limits, minIntervalSec: 10 };
+  const who = submitter({ ip: "203.0.113.90" });
+  const now = Date.now();
+
+  assertWithinLimits(who, gapped, now);
+  recordSubmission(who, now);
+
+  // Honest, and with the true wait rather than the hourly window's — somebody
+  // filing a second genuine report is told ten seconds, not an hour.
+  assert.throws(
+    () => assertWithinLimits(who, gapped, now + 1000),
+    (err: HttpError) => err.code === "rate_limited" && err.extra.retryAfter === 10,
   );
 
-  assertNotBanned(submitter({ installId: "some-other-install" }), nowIso);
+  // And once the gap has passed it lets them through.
+  assertWithinLimits(who, gapped, now + 11_000);
+});
+
+test("the gap follows the install id across a change of address", () => {
+  const gapped: LimitConfig = { ...limits, minIntervalSec: 10 };
+  const now = Date.now();
+
+  recordSubmission(submitter({ ip: "192.0.2.201", installId: "gap-install" }), now);
+
+  assert.throws(
+    () =>
+      assertWithinLimits(
+        submitter({ ip: "192.0.2.202", installId: "gap-install" }),
+        gapped,
+        now + 500,
+      ),
+    (err: HttpError) => err.code === "rate_limited",
+  );
 });
 
 test("an expired ban is not a ban", () => {
@@ -106,7 +174,7 @@ test("an expired ban is not a ban", () => {
     expires_at: new Date(Date.now() - 3600_000).toISOString(),
   });
 
-  assertNotBanned(submitter({ ip: "198.51.100.200" }), nowIso);
+  assert.equal(banFor(submitter({ ip: "198.51.100.200" }), nowIso), null);
 });
 
 test("a forwarded address is only believed when the proxy is the one asking", () => {
