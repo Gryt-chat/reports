@@ -260,6 +260,25 @@ unsorted.
 The report text goes to the model as data to classify, and the model is told as
 much, since it is whatever a stranger typed.
 
+## Filing a report as a task
+
+Reading a report and deciding it is real is one step. Writing it up is another,
+and the second is where reports stop.
+
+**Create task** asks the model that already triaged the report to draft one —
+a title and a description in the shape the board uses — and shows it before
+anything is created. The draft is editable, because a model drafting from one
+person's description of a fault will sometimes read it the wrong way round, and
+a draft nobody can correct is one that gets filed wrong or thrown away.
+
+Filing does three things: creates the task, records its id on the report so the
+same report cannot be filed twice, and resolves the report. The description
+carries the report id and a link back to it, so a task can be traced to what
+prompted it rather than rewritten from scratch six weeks later.
+
+`REPORTS_VIKUNJA_TOKEN` is a write credential for the board. Without it the
+button is not offered at all.
+
 ## Statuses
 
 Triage says what a report looks like. The status says what you decided about it,

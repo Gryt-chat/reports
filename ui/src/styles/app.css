@@ -377,3 +377,35 @@ a {
   accent-color: var(--gryt-accent-9);
   cursor: pointer;
 }
+
+/* The drafted task. Set apart from the decide row because it is a thing being
+   written rather than a button being pressed. */
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--gryt-neutral-6);
+  border-radius: var(--gryt-radius-lg);
+  background: var(--gryt-neutral-2);
+}
+
+.draft__note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--gryt-neutral-11);
+}
+
+.draft__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.decide__filed {
+  align-self: center;
+  font-size: 0.85rem;
+  color: var(--gryt-accent-11);
+}
+

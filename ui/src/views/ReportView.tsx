@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { Diagnostics } from "../components/Diagnostics";
-import { api, REPORT_STATUSES, type Report, type ReportStatus } from "../lib/api";
+import { api, type TaskDraft, REPORT_STATUSES, type Report, type ReportStatus } from "../lib/api";
 import {
   fallbackHeading,
   fullDate,
@@ -24,6 +24,41 @@ export function ReportView({ report, onChanged }: ReportViewProps) {
   const [note, setNote] = useState(report.status_note ?? "");
   const [busy, setBusy] = useState<ReportStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /* The model's answer, held here until somebody files or discards it. Nothing
+     reaches the board while this is on screen. */
+  const [draft, setDraft] = useState<TaskDraft | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [filing, setFiling] = useState(false);
+
+  async function startDraft() {
+    setDrafting(true);
+    setError(null);
+    try {
+      setDraft(await api.draftTask(report.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not draft a task.");
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  async function file() {
+    if (!draft) return;
+    setFiling(true);
+    setError(null);
+    try {
+      const task = await api.createTask(report.id, draft);
+      setDraft(null);
+      /* Reload rather than patching state: filing also resolves the report,
+         and the panel showing a stale status is how you file it twice. */
+      window.location.assign(task.url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The board would not take that.");
+    } finally {
+      setFiling(false);
+    }
+  }
 
   useEffect(() => {
     setNote(report.status_note ?? "");
@@ -146,7 +181,31 @@ export function ReportView({ report, onChanged }: ReportViewProps) {
           >
             Triage again
           </Button>
+          {report.task_url ? (
+            <a className="decide__filed" href={report.task_url} target="_blank" rel="noreferrer">
+              Filed as #{report.task_id}
+            </a>
+          ) : (
+            <Button
+              size="small"
+              tone="ghost"
+              disabled={busy !== null || drafting}
+              onClick={() => void startDraft()}
+            >
+              {drafting ? "Drafting…" : "Create task"}
+            </Button>
+          )}
         </div>
+
+        {draft ? (
+          <TaskDraftPanel
+            draft={draft}
+            filing={filing}
+            onChange={setDraft}
+            onCancel={() => setDraft(null)}
+            onFile={() => void file()}
+          />
+        ) : null}
         {error ? (
           <Alert severity="error" style={{ marginTop: "0.75rem" }}>
             {error}
@@ -193,6 +252,63 @@ export function ReportView({ report, onChanged }: ReportViewProps) {
         {report.identity_subject ? ` · key ${report.identity_subject}` : ""}
         {report.ip ? ` · ${report.ip}` : ""}
       </p>
+    </div>
+  );
+}
+
+/**
+ * The drafted task, before it is anything.
+ *
+ * Editable, because the model is drafting from one person's description of
+ * something going wrong and will sometimes read it the wrong way round. A
+ * draft nobody can correct is one that gets filed wrong or thrown away, and
+ * both cost more than the draft saved.
+ */
+function TaskDraftPanel({
+  draft,
+  filing,
+  onChange,
+  onCancel,
+  onFile,
+}: {
+  draft: TaskDraft;
+  filing: boolean;
+  onChange: (draft: TaskDraft) => void;
+  onCancel: () => void;
+  onFile: () => void;
+}) {
+  return (
+    <div className="draft">
+      <TextField
+        label="Title"
+        size="small"
+        value={draft.title}
+        onChange={(event) => onChange({ ...draft, title: event.target.value })}
+      />
+      <TextField
+        label="Description"
+        multiline
+        minRows={8}
+        size="small"
+        value={draft.description}
+        onChange={(event) => onChange({ ...draft, description: event.target.value })}
+      />
+      <p className="draft__note">
+        The report id and a link back to it are added when this is filed, so the
+        task can be traced to what prompted it. Filing also resolves the report.
+      </p>
+      <div className="draft__actions">
+        <Button size="small" tone="neutral" disabled={filing} onClick={onCancel}>
+          Discard
+        </Button>
+        <Button
+          size="small"
+          disabled={filing || !draft.title.trim() || !draft.description.trim()}
+          onClick={onFile}
+        >
+          {filing ? "Filing…" : "File it"}
+        </Button>
+      </div>
     </div>
   );
 }

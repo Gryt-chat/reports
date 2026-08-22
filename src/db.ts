@@ -47,6 +47,8 @@ export function initDb(dataDir: string): void {
 
       triage_status      TEXT NOT NULL DEFAULT 'pending',
       triage_attempts    INTEGER NOT NULL DEFAULT 0,
+      task_id            INTEGER,
+      task_url           TEXT,
       triage_verdict     TEXT,
       triage_priority    TEXT,
       triage_summary     TEXT,
@@ -140,6 +142,9 @@ function migrate(db: DatabaseSync): void {
     ["status", "TEXT NOT NULL DEFAULT 'new'"],
     ["status_note", "TEXT"],
     ["status_at", "TEXT"],
+    // The task this report became, so the same report is not filed twice.
+    ["task_id", "INTEGER"],
+    ["task_url", "TEXT"],
   ];
 
   for (const [name, definition] of additions) {
@@ -218,6 +223,9 @@ export interface ReportRow {
   payload: string;
   triage_status: TriageStatus;
   triage_attempts: number;
+  /** The Vikunja task filed from this report, if one was. */
+  task_id: number | null;
+  task_url: string | null;
   triage_verdict: string | null;
   triage_priority: string | null;
   triage_summary: string | null;
@@ -250,7 +258,7 @@ const SUMMARY_COLUMNS = `id, received_at, type, title, message, contact,
   triage_status, triage_attempts, triage_verdict, triage_priority,
   triage_summary, triage_area, triage_duplicate_of, triage_reasoning,
   triage_model, triage_at, triage_error,
-  status, status_note, status_at, read_at, notified_at`;
+  status, status_note, status_at, task_id, task_url, read_at, notified_at`;
 
 export interface NewReport {
   id: string;
@@ -407,6 +415,19 @@ export function countReports(f: CountFilter): number {
  * a sentence for something turned down. A closed report keeps everything it
  * arrived with; closing is a label, not a delete.
  */
+/**
+ * Record the task a report became.
+ *
+ * Both directions matter: the task names the report in its description, and
+ * this is the other half, so the inbox can say a report has already been filed
+ * rather than offering to file it again.
+ */
+export function setTask(id: string, taskId: number, taskUrl: string): void {
+  handle()
+    .prepare("UPDATE reports SET task_id = ?, task_url = ? WHERE id = ?")
+    .run(taskId, taskUrl, id);
+}
+
 export function setStatus(
   id: string,
   status: ReportStatus,

@@ -21,6 +21,7 @@ import {
   REPORT_STATUSES,
   resetTriage,
   setStatus,
+  setTask,
   stats,
   type BanKind,
   type ReportRow,
@@ -31,6 +32,8 @@ import {
 } from "./db.ts";
 import type { Dashboard } from "./dashboard.ts";
 import { esc, header, HttpError, readBody, sendHtml, sendJson } from "./http.ts";
+import type { TriageModel } from "./models.ts";
+import { createTask, draftTask } from "./task.ts";
 import { blockedCount } from "./limits.ts";
 import {
   completeLogin,
@@ -72,6 +75,7 @@ export async function handleAdmin(
   config: Config,
   oidc: OidcConfig | null,
   dashboard: Dashboard | null,
+  model: TriageModel,
 ): Promise<void> {
   if (!config.adminToken && !oidc) {
     throw new HttpError(404, "not_found", "Nothing configured to guard the inbox");
@@ -136,7 +140,7 @@ export async function handleAdmin(
   }
 
   if (req.method === "POST") {
-    await handlePost(req, res, path, config, actor);
+    await handlePost(req, res, path, config, actor, model);
     return;
   }
 
@@ -242,6 +246,7 @@ async function handlePost(
   path: string,
   config: Config,
   actor: Actor,
+  model: TriageModel,
 ): Promise<void> {
   // The HTML pages post to /admin/reports/…, everything else to
   // /admin/api/reports/…. Same actions, so one route answers both.
@@ -265,6 +270,45 @@ async function handlePost(
 
   // Setting a status takes a form post from the detail page and a JSON body
   // from anything else, so it accepts both rather than having two routes.
+  // Ask the model for a task. Creates nothing — see `task.ts`.
+  const drafting = path.match(/^\/admin\/api\/reports\/([\w-]+)\/task\/draft$/);
+  if (drafting && req.method === "POST") {
+    const report = getReport(drafting[1]);
+    if (!report) throw new HttpError(404, "not_found", "No such report");
+    sendJson(res, 200, await draftTask(report, model));
+    return;
+  }
+
+  // File one. The body is whatever the person edited it into, not the draft.
+  const filing = path.match(/^\/admin\/api\/reports\/([\w-]+)\/task$/);
+  if (filing && req.method === "POST") {
+    const report = getReport(filing[1]);
+    if (!report) throw new HttpError(404, "not_found", "No such report");
+    if (report.task_id) {
+      throw new HttpError(409, "already_filed", "This report is already a task");
+    }
+
+    const body = JSON.parse((await readBody(req, 32 * 1024)).toString("utf8") || "{}") as {
+      title?: string;
+      description?: string;
+    };
+    const title = String(body.title ?? "").trim();
+    const description = String(body.description ?? "").trim();
+    if (!title || !description) {
+      throw new HttpError(400, "empty_task", "A task needs a title and a description");
+    }
+
+    const task = await createTask(report, { title, description }, config);
+    setTask(report.id, task.id, task.url);
+
+    // Filed is done. Leaving it open would mean reading it again to discover
+    // it had already been dealt with, which is the thing the inbox is for.
+    setStatus(report.id, "resolved", `Filed as ${task.url}`, new Date().toISOString());
+
+    sendJson(res, 201, { id: task.id, url: task.url });
+    return;
+  }
+
   const decide = path.match(/^\/admin(?:\/api)?\/reports\/([\w-]+)\/status$/);
   if (decide) {
     const id = decide[1];

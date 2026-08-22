@@ -99,6 +99,20 @@ export interface Config {
     duplicateWindow: number;
   };
 
+  /**
+   * The board a report can be filed onto.
+   *
+   * A write credential for Vikunja, so it lives here rather than anywhere in
+   * the repository. Without a token the Create task button is not offered —
+   * an inbox that shows a button which cannot work is worse than one that does
+   * not show it.
+   */
+  vikunja: {
+    url: string;
+    token: string | null;
+    projectId: number;
+  };
+
   discordWebhookUrl: string | null;
   /** Notify on arrival, after triage, or not at all. */
   notifyOn: "receive" | "triage" | "never";
@@ -251,6 +265,15 @@ export function loadConfig(): Config {
       batch: int("REPORTS_TRIAGE_BATCH", 5, 1, 50),
       maxAttempts: int("REPORTS_TRIAGE_MAX_ATTEMPTS", 3, 1, 20),
       duplicateWindow: int("REPORTS_TRIAGE_DUPLICATE_WINDOW", 25, 0, 200),
+    },
+
+    vikunja: {
+      url: (process.env.REPORTS_VIKUNJA_URL?.trim() || "https://tasks.sivert.io").replace(
+        /\/$/,
+        "",
+      ),
+      token: process.env.REPORTS_VIKUNJA_TOKEN?.trim() || null,
+      projectId: int("REPORTS_VIKUNJA_PROJECT", 2, 1, 1_000_000),
     },
 
     discordWebhookUrl: process.env.REPORTS_DISCORD_WEBHOOK_URL?.trim() || null,

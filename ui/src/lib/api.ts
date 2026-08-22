@@ -50,6 +50,9 @@ export interface ReportSummary {
   status: ReportStatus;
   status_note: string | null;
   status_at: string | null;
+  /** The task this report was filed as, if it was. */
+  task_id: number | null;
+  task_url: string | null;
   read_at: string | null;
   notified_at: string | null;
 }
@@ -102,6 +105,11 @@ export interface Filter {
   unread?: boolean;
   q?: string;
   page?: number;
+}
+
+export interface TaskDraft {
+  title: string;
+  description: string;
 }
 
 export class ApiError extends Error {
@@ -161,6 +169,18 @@ export const api = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ status, note }),
+    }),
+
+  /** Ask the model for a task. Creates nothing. */
+  draftTask: (id: string) =>
+    request<TaskDraft>(`/reports/${id}/task/draft`, { method: "POST" }),
+
+  /** File it, with whatever the draft was edited into. */
+  createTask: (id: string, draft: TaskDraft) =>
+    request<{ id: number; url: string }>(`/reports/${id}/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(draft),
     }),
 
   retriage: (id: string) =>

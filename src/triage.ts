@@ -123,7 +123,14 @@ function duplicateContext(rows: ReportRow[], excludeId: string): string {
 }
 
 export class Triager {
-  private readonly model: TriageModel;
+  /**
+   * The same model the triage pass uses.
+   *
+   * Read by the inbox to draft a task from a report. One instance rather than
+   * two, so a report is drafted by whatever sorted it — pointing them at
+   * different models would be a thing nobody notices until the answers differ.
+   */
+  readonly model: TriageModel;
   private readonly config: Config;
   private readonly onTriaged: (report: ReportRow) => void;
   private timer: NodeJS.Timeout | null = null;
