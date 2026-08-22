@@ -163,7 +163,15 @@ export async function handleAdmin(
   }
 
   if (path === "/admin/api/stats") {
-    sendJson(res, 200, stats());
+    // The version rides along here rather than on /healthz. Health is public
+    // and says only that the process is alive; which release is running is a
+    // fact for somebody who has signed in.
+    sendJson(res, 200, {
+      ...stats(),
+      service: "gryt-reports",
+      version: config.version,
+      uptimeSec: Math.round((Date.now() - config.startedAt) / 1000),
+    });
     return;
   }
 

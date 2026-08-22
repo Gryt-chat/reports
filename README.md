@@ -120,7 +120,7 @@ field an app starts sending before this service knows about it still lands in
 ### Responses
 
 `GET /healthz` answers `{"ok": true}` and nothing else. The service name, the
-version and the uptime are on the inbox listener, behind sign-in: together they
+version and the uptime are on `/admin/api/stats`, behind sign-in: together they
 say which release is running and therefore which fixes are not in it, which is
 the first thing worth writing down about a host and the last thing worth
 handing out.
@@ -241,20 +241,15 @@ something now tracked, a sentence for something turned down.
 
 ## The inbox
 
-**Two listeners, not two services.** Ingest has to be reachable from anywhere —
-the apps post from wherever the person is. The inbox does not, and on one port
-the admin token would be the only thing between the open internet and every
-report anyone has ever sent. So `/admin` gets its own port, bound to loopback by
-default, and the public listener answers `404` for `/admin` rather than
-inviting a guess at a token.
+`/admin`, on the same port everything else is on.
 
-| | |
-|---|---|
-| `PORT` (8080) | `POST /v1/reports`, `/healthz`. The one to route from the internet. |
-| `REPORTS_ADMIN_PORT` (8081) | `/admin`. Loopback unless you say otherwise. |
-
-Setting them to the same number puts both on one listener and logs a warning.
-Fine on a laptop.
+This used to be a second listener on a second port with a hostname of its own,
+so that the public one could answer `404` for `/admin` and not admit an inbox
+existed. What that bought was one scan's worth of guessing; what it cost was two
+of everything — two routes, two ports, two places for a header or a cache rule
+to be right in one and wrong in the other. It is how the dashboard bundle ended
+up cached at the edge from before it was gated. One door, and sign-in is what
+holds it.
 
 **People sign in with their Gryt account.** Keycloak says who somebody is; a
 list inside this service says whether they may read the inbox. A Gryt account is
@@ -326,8 +321,6 @@ before deploying:
 |---|---|---|
 | `REPORTS_APP_KEYS` | — | `mobile:key,desktop:key`. Required. |
 | `REPORTS_ADMIN_TOKEN` | — | For scripts. People sign in instead. |
-| `REPORTS_ADMIN_PORT` | `8081` | Where the inbox listens. Never route this from the internet without sign-in in front. |
-| `REPORTS_ADMIN_HOST` | `127.0.0.1` | Loopback on a host. The Docker image sets `0.0.0.0`, because in a container the published port is what restricts it. |
 | `REPORTS_OIDC_ISSUER` | — | e.g. `https://auth.gryt.chat/realms/gryt`. With `_CLIENT_ID` and `_CLIENT_SECRET`, turns on sign-in. |
 | `REPORTS_BOOTSTRAP_ADMIN` | — | Who gets in first, while the list is empty. |
 | `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. |
@@ -336,15 +329,10 @@ before deploying:
 | `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
 
 ```sh
-docker run -v gryt-reports:/data \
-  -p 8080:8080 \
-  -p 127.0.0.1:8081:8081 \
+docker run -v gryt-reports:/data -p 8080:8080 \
   -e REPORTS_APP_KEYS=mobile:… -e REPORTS_ADMIN_TOKEN=… \
   ghcr.io/gryt-chat/reports:latest
 ```
-
-Publish 8080 wherever it needs to be reachable from. Keep 8081 on loopback, or
-put sign-in and a hostname in front of it.
 
 ## Licence
 
