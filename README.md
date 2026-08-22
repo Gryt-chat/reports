@@ -1,2 +1,239 @@
-# reports
-Gryt's inbox for bug reports and feedback sent from inside the apps. One endpoint, SQLite storage, rate limits, and an AI triage pass.
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Gryt-chat/client/main/public/logo.svg" width="80" alt="Gryt logo" />
+  <h1>Gryt reports</h1>
+  <p>The inbox for bug reports and feedback sent from inside the Gryt apps.<br />One endpoint, SQLite, rate limits, and a triage pass that sorts and never deletes.</p>
+</div>
+
+<br />
+
+```sh
+curl -X POST https://reports.gryt.chat/v1/reports \
+  -H 'content-type: application/json' \
+  -H 'x-gryt-app: mobile' \
+  -H 'x-gryt-app-key: <the key that app ships>' \
+  -d '{
+        "type": "bug",
+        "message": "Voice cuts out when I switch from wifi to cellular",
+        "app": { "version": "1.4.0", "build": "412", "channel": "beta" },
+        "device": { "platform": "ios", "osVersion": "18.2", "model": "iPhone15,3" }
+      }'
+```
+
+```json
+{ "id": "rep_mt43rbcvf6c28aec", "receivedAt": "2026-08-22T08:14:35.839Z" }
+```
+
+## Why this exists
+
+"Give feedback" and "Report a bug" used to open the issue tracker in a browser.
+That asks somebody to sign in to GitHub on a phone before they can tell us the
+app crashed. Most people won't, and the ones who would are not the ones we are
+missing.
+
+So both rows open a form instead, and the form posts here. This service is not
+part of a Gryt server and a self-hoster never deploys it — it is Gryt the
+product's inbox, and it stays unexposed. Public feature requests, the ones
+people vote on, still live in Fider at
+[feedback.gryt.chat](https://feedback.gryt.chat).
+
+A bug and a piece of feedback are the same shape with a different label, so
+there is one endpoint and a `type` field rather than two of everything.
+
+## What a report carries
+
+Only `type` and `message` are required. Everything else is diagnostics, and
+diagnostics are read by a person rather than by code — so a field an app gets
+wrong is truncated or dropped, never a reason to reject the report. A report
+lost to a validation error is a bug nobody hears about.
+
+```jsonc
+{
+  "type": "bug",                    // or "feedback"
+  "message": "what they wrote",
+  "title": "optional one-liner",
+  "contact": "optional, only if they offered it",
+
+  "app": {
+    "version": "1.4.0",
+    "build": "412",
+    "channel": "beta",
+    "commit": "a1b2c3d",
+    "installId": "random per install, not per person",
+    "locale": "nb-NO"
+  },
+
+  "device": {
+    "platform": "ios",              // ios | android | macos | windows | linux | web
+    "osVersion": "18.2",
+    "model": "iPhone15,3",
+    "manufacturer": "Apple",
+    "arch": "arm64",
+    "isEmulator": false,
+    "screen": { "width": 393, "height": 852, "scale": 3 },
+    "memoryMb": 6144,
+    "diskFreeMb": 20480,
+    "batteryPct": 62,
+    "timezone": "Europe/Oslo"
+  },
+
+  "runtime": {
+    "engine": "hermes",             // hermes | electron | browser | node
+    "engineVersion": "0.12.0",
+    "nodeVersion": "22.13.0",
+    "chromeVersion": "130.0.0",
+    "electronVersion": "33.0.0",
+    "reactNativeVersion": "0.79.1",
+    "expoVersion": "52.0.0",
+    "userAgent": "…"
+  },
+
+  "context": {
+    "route": "/channel/voice",      // where in the app they were
+    "serverVersion": "2.9.1",
+    "sfuVersion": "1.7.0",
+    "connected": true,
+    "voiceActive": true,
+    "networkType": "cellular",
+    "online": true,
+    "sessionUptimeSec": 940,
+    "permissions": { "microphone": "granted", "camera": "denied" }
+  },
+
+  "error": { "name": "TypeError", "message": "…", "stack": "…" },
+  "logs": ["the tail of the app's own log"],
+  "extra": { "anything this service has no column for": true }
+}
+```
+
+The three that matter most — app version, build number, OS version — are the
+ones every bug report needs and nobody remembers to include. The apps already
+assemble them for the Version row on the preferences page, so the form should
+send that same object without asking.
+
+`app.id` is ignored if you send it. It comes from the header, so a report
+cannot claim to be from a different client than the key it authenticated with.
+
+The whole normalised report is stored as JSON next to the indexed columns, so a
+field an app starts sending before this service knows about it still lands in
+`extra` and is still there to read.
+
+### Responses
+
+| Status | Meaning |
+|---|---|
+| `202` | Stored. Body is `{ id, receivedAt }`. |
+| `400` | `invalid_json`, `invalid_body`, `invalid_type`, `empty_message`. |
+| `401` | `missing_app`, `unknown_app`, `bad_app_key`, `bad_signature`, `replayed_assertion`, `signature_required`. |
+| `403` | `banned`. Says nothing about which identifier is banned. |
+| `413` | `body_too_large`. |
+| `429` | `rate_limited`, with `Retry-After`. |
+
+## Keeping the junk out
+
+**The app key is friction, not authentication.** Every client ships one and
+sends it as `X-Gryt-App-Key`, one key per app so a leaked key can be rotated
+without shipping the others. Anyone can pull it out of an app bundle or read one
+request in a proxy. What it buys is that a scanner finding an open POST endpoint
+cannot fill the table overnight — real, and worth having, and not a defence
+against somebody who wants to spam this specifically.
+
+**The signature is what actually authenticates, and it is optional until every
+client sends one.** Every Gryt client already holds an identity keypair, and
+joining a server is a signed challenge-response over P-256. A report signed with
+that same key is verifiable, ties repeat submissions together without collecting
+anything about the person, and makes banning an abuser possible rather than
+banning whatever IP they were on.
+
+There is no challenge round trip here, so replay is prevented three other ways:
+the assertion is bound to the exact request body through `bh`, it expires in
+five minutes, and its `jti` is good exactly once.
+
+```
+X-Gryt-Identity: <ES256 JWT>
+
+protected header  { "alg": "ES256", "jwk": <the public half> }
+claims            { "sub": <RFC 7638 thumbprint of that jwk>,
+                    "aud": "gryt:reports",
+                    "bh":  <base64url sha256 of the request body>,
+                    "jti": <once>, "iat": …, "exp": <= 5 minutes }
+```
+
+What gets stored is the key's thumbprint, not a Gryt server's derived subject.
+This service authorises nothing on any server, so it has no reason to agree with
+a server's namespace — and the thumbprint is what those subjects are derived
+from anyway. Set `REPORTS_REQUIRE_SIGNATURE=true` once every client signs.
+
+**Rate limits** are counted per IP, per install id and per identity key, in
+SQLite rather than in memory, so restarting the service is not a way to clear
+your limit. **Bans** come in four kinds: `ip`, `install`, `subject` and `app`.
+The last one turns off a whole client and exists for the day a key leaks.
+
+## Triage
+
+If `ANTHROPIC_API_KEY` is set, every report gets read by Claude within a few
+seconds of arriving. It gives back a verdict (`actionable`, `needs_info`,
+`not_a_bug`, `noise`), a priority, a one-line summary, which part of Gryt it
+probably belongs to, and whether it repeats something already in the inbox.
+
+It sorts and never deletes. Nothing is dropped, nothing is auto-closed, and the
+verdict only decides what to read first — a wrongly binned report is one nobody
+ever sees again, which is a worse outcome than a long queue. A report the pass
+cannot classify, including one a safety classifier declines, stays in the inbox
+unsorted.
+
+The report text goes to the model as data to classify, and the model is told as
+much, since it is whatever a stranger typed.
+
+## The inbox
+
+`/admin`, behind `REPORTS_ADMIN_TOKEN`. Open it once with `?token=…` and the
+token is swapped for a `SameSite=Strict` cookie so it stops turning up in
+history and referrers.
+
+Server-rendered, no build step and no client JavaScript, because the whole page
+is text strangers wrote. The same data is available as JSON:
+
+```
+GET  /admin/api/reports?type=bug&verdict=actionable&status=pending&shelf=inbox&q=voice&page=2
+GET  /admin/api/reports/<id>
+GET  /admin/api/stats
+GET  /admin/api/bans
+POST /admin/api/bans            {"kind":"install","value":"…","reason":"…","expiresAt":null}
+POST /admin/api/bans/<id>/delete
+```
+
+Set `REPORTS_DISCORD_WEBHOOK_URL` and each report is posted to Discord as it
+arrives (`REPORTS_NOTIFY_ON=receive`) or once triage has looked at it (`triage`,
+the default), so reading the inbox does not depend on remembering it is there.
+
+## Running it
+
+```sh
+yarn install
+cp .env.example .env     # at minimum, set REPORTS_APP_KEYS and REPORTS_ADMIN_TOKEN
+yarn dev
+```
+
+The service refuses to start with no app keys and no `REPORTS_ALLOW_UNKEYED`,
+because the endpoint it exposes is public.
+
+Every setting is in [`.env.example`](.env.example) with what it does. Set these
+before deploying:
+
+| Variable | Default | |
+|---|---|---|
+| `REPORTS_APP_KEYS` | — | `mobile:key,desktop:key`. Required. |
+| `REPORTS_ADMIN_TOKEN` | — | No token, no `/admin`. |
+| `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. Right behind the tunnel, wrong if the port is reachable directly. |
+| `REPORTS_CORS_ORIGINS` | — | Browser origins allowed to POST. The web client needs listing. |
+| `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
+
+```sh
+docker run -p 8080:8080 -v gryt-reports:/data \
+  -e REPORTS_APP_KEYS=mobile:… -e REPORTS_ADMIN_TOKEN=… \
+  ghcr.io/gryt-chat/reports:latest
+```
+
+## Licence
+
+AGPL-3.0-or-later, like the rest of Gryt.
