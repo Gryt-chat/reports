@@ -6,15 +6,19 @@ import {
   addBan,
   countReports,
   getReport,
+  isReportStatus,
   listBans,
   listReports,
   markRead,
   removeBan,
+  REPORT_STATUSES,
   resetTriage,
-  setArchived,
+  setStatus,
   stats,
   type BanKind,
   type ReportRow,
+  type ReportStatus,
+  type ReportSummary,
   type ReportType,
   type TriageStatus,
 } from "./db.ts";
@@ -124,15 +128,54 @@ async function handlePost(
   path: string,
   config: Config,
 ): Promise<void> {
-  const action = path.match(/^\/admin\/reports\/([\w-]+)\/(read|archive|unarchive|retriage)$/);
+  // The HTML pages post to /admin/reports/…, everything else to
+  // /admin/api/reports/…. Same actions, so one route answers both.
+  const action = path.match(/^\/admin(?:\/api)?\/reports\/([\w-]+)\/(read|retriage)$/);
   if (action) {
     const [, id, verb] = action;
     if (!getReport(id)) throw new HttpError(404, "not_found", "No such report");
 
     if (verb === "read") markRead(id, new Date().toISOString());
-    if (verb === "archive") setArchived(id, new Date().toISOString());
-    if (verb === "unarchive") setArchived(id, null);
     if (verb === "retriage") resetTriage(id);
+
+    if (path.startsWith("/admin/api/")) {
+      sendJson(res, 200, { id, [verb]: true });
+      return;
+    }
+
+    res.writeHead(303, { location: `/admin/reports/${id}` });
+    res.end();
+    return;
+  }
+
+  // Setting a status takes a form post from the detail page and a JSON body
+  // from anything else, so it accepts both rather than having two routes.
+  const decide = path.match(/^\/admin(?:\/api)?\/reports\/([\w-]+)\/status$/);
+  if (decide) {
+    const id = decide[1];
+    if (!getReport(id)) throw new HttpError(404, "not_found", "No such report");
+
+    const raw = (await readBody(req, 16 * 1024)).toString("utf8");
+    const contentType = header(req, "content-type") ?? "";
+    const fields = contentType.includes("application/json")
+      ? (JSON.parse(raw || "{}") as { status?: string; note?: string })
+      : Object.fromEntries(new URLSearchParams(raw));
+
+    if (!isReportStatus(fields.status)) {
+      throw new HttpError(
+        400,
+        "invalid_status",
+        `status must be one of ${REPORT_STATUSES.join(", ")}`,
+      );
+    }
+
+    const note = fields.note?.toString().trim().slice(0, 500) || null;
+    setStatus(id, fields.status, note, new Date().toISOString());
+
+    if (path.startsWith("/admin/api/")) {
+      sendJson(res, 200, { id, status: fields.status, note });
+      return;
+    }
 
     res.writeHead(303, { location: `/admin/reports/${id}` });
     res.end();
@@ -206,17 +249,19 @@ function filterFrom(url: URL) {
   const type = url.searchParams.get("type");
   const verdict = url.searchParams.get("verdict");
   const status = url.searchParams.get("status");
+  const triage = url.searchParams.get("triage");
   const shelf = url.searchParams.get("shelf");
 
   return {
     type: type === "bug" || type === "feedback" ? (type as ReportType) : undefined,
     verdict: verdict || undefined,
-    status:
-      status === "pending" || status === "done" || status === "error"
-        ? (status as TriageStatus)
+    status: isReportStatus(status) ? status : undefined,
+    triageStatus:
+      triage === "pending" || triage === "done" || triage === "error"
+        ? (triage as TriageStatus)
         : undefined,
     shelf:
-      shelf === "archived" || shelf === "all" ? (shelf as "archived" | "all") : ("inbox" as const),
+      shelf === "closed" || shelf === "all" ? (shelf as "closed" | "all") : ("open" as const),
     unreadOnly: url.searchParams.get("unread") === "1",
     search: url.searchParams.get("q") || undefined,
   };
@@ -249,6 +294,8 @@ const STYLE = `
   td, th { border-bottom: 1px solid rgba(128,128,128,.25); padding: .3rem .5rem; text-align: left; vertical-align: top; }
   form { display: inline; }
   button { font: inherit; padding: .3rem .8rem; }
+  form.decide { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1rem 0; }
+  form.decide input { flex: 1 1 16rem; font: inherit; padding: .3rem .5rem; }
 `;
 
 function page(title: string, body: string): string {
@@ -260,18 +307,21 @@ function page(title: string, body: string): string {
 <body>${body}</body></html>`;
 }
 
-function listPage(rows: ReportRow[], total: number, url: URL, offset: number): string {
+function listPage(rows: ReportSummary[], total: number, url: URL, offset: number): string {
   const s = stats();
   const links = [
-    ["Everything", ""],
+    ["Open", ""],
     ["Unread", "unread=1"],
     ["Bugs", "type=bug"],
     ["Feedback", "type=feedback"],
     ["Actionable", "verdict=actionable"],
     ["Needs info", "verdict=needs_info"],
     ["Noise", "verdict=noise"],
-    ["Untriaged", "status=pending"],
-    ["Archived", "shelf=archived"],
+    ["Untriaged", "triage=pending"],
+    ["Resolved", "status=resolved"],
+    ["Won't do", "status=wont_do"],
+    ["Closed", "shelf=closed"],
+    ["Everything", "shelf=all"],
   ]
     .map(([label, query]) => `<a href="/admin${query ? `?${query}` : ""}">${esc(label)}</a>`)
     .join("");
@@ -282,6 +332,7 @@ function listPage(rows: ReportRow[], total: number, url: URL, offset: number): s
           const when = new Date(r.received_at).toISOString().replace("T", " ").slice(0, 16);
           const tags = [
             `<span class="tag ${r.type}">${esc(r.type)}</span>`,
+            r.status === "new" ? "" : `<span class="tag">${esc(statusLabel(r.status))}</span>`,
             r.triage_priority
               ? `<span class="tag ${esc(r.triage_priority)}">${esc(r.triage_priority)}</span>`
               : "",
@@ -314,7 +365,7 @@ function listPage(rows: ReportRow[], total: number, url: URL, offset: number): s
   return page(
     "Gryt reports",
     `<h1>Gryt reports</h1>
-     <p class="muted">${s.total} in total · ${s.unread} unread · ${s.pending} waiting on triage · ${s.bugs} bugs · ${s.feedback} feedback</p>
+     <p class="muted">${s.open} open · ${s.unread} unread · ${s.pending} waiting on triage · ${s.total} in total · ${s.bugs} bugs · ${s.feedback} feedback</p>
      <div class="filters">${links}</div>
      <ul class="reports">${items}</ul>
      <p>${pages.join(" · ")}</p>`,
@@ -327,10 +378,24 @@ function pageLink(url: URL, page: number): string {
   return `${next.pathname}?${next.searchParams.toString()}`;
 }
 
+const STATUS_LABELS: Record<ReportStatus, string> = {
+  new: "new",
+  open: "open",
+  resolved: "resolved",
+  wont_do: "won't do",
+  duplicate: "duplicate",
+};
+
+function statusLabel(status: ReportStatus): string {
+  return STATUS_LABELS[status] ?? status;
+}
+
 function detailPage(r: ReportRow): string {
   const payload = JSON.parse(r.payload) as Record<string, unknown>;
 
   const facts: [string, string | null][] = [
+    ["Status", `${statusLabel(r.status)}${r.status_note ? ` — ${r.status_note}` : ""}`],
+    ["Decided", r.status_at],
     ["Received", r.received_at],
     ["Type", r.type],
     ["App", `${r.app_id} ${r.app_version ?? "?"}`],
@@ -370,10 +435,17 @@ function detailPage(r: ReportRow): string {
      <p class="muted">${esc(r.id)}</p>
      <pre>${esc(r.message)}</pre>
      <table>${table}</table>
+     <form method="post" action="/admin/reports/${esc(r.id)}/status" class="decide">
+       <input type="text" name="note" maxlength="500" placeholder="why, or the task it became"
+              value="${esc(r.status_note ?? "")}" />
+       ${REPORT_STATUSES.filter((status) => status !== r.status)
+         .map(
+           (status) =>
+             `<button type="submit" name="status" value="${status}">${esc(statusLabel(status))}</button>`,
+         )
+         .join("")}
+     </form>
      <p>
-       <form method="post" action="/admin/reports/${esc(r.id)}/${r.archived_at ? "unarchive" : "archive"}">
-         <button type="submit">${r.archived_at ? "Unarchive" : "Archive"}</button>
-       </form>
        <form method="post" action="/admin/reports/${esc(r.id)}/retriage">
          <button type="submit">Triage again</button>
        </form>

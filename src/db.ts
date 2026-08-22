@@ -57,8 +57,11 @@ export function initDb(dataDir: string): void {
       triage_at          TEXT,
       triage_error       TEXT,
 
+      status             TEXT NOT NULL DEFAULT 'new',
+      status_note        TEXT,
+      status_at          TEXT,
+
       read_at            TEXT,
-      archived_at        TEXT,
       notified_at        TEXT
     );
 
@@ -95,7 +98,48 @@ export function initDb(dataDir: string): void {
     );
   `);
 
+  migrate(db);
+
   consola.info(`[db] SQLite ready at ${path}`);
+}
+
+/**
+ * Add columns a database made by an older build does not have.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
+ * without this a service that has been taking reports for a while would start
+ * up fine and then fail on the first query naming a new column.
+ */
+function migrate(db: DatabaseSync): void {
+  const columns = new Set(
+    db.prepare("PRAGMA table_info(reports)").all().map((row) => String(row.name)),
+  );
+
+  const additions: [string, string][] = [
+    ["status", "TEXT NOT NULL DEFAULT 'new'"],
+    ["status_note", "TEXT"],
+    ["status_at", "TEXT"],
+  ];
+
+  for (const [name, definition] of additions) {
+    if (columns.has(name)) continue;
+    db.exec(`ALTER TABLE reports ADD COLUMN ${name} ${definition}`);
+    consola.info(`[db] Added reports.${name}`);
+  }
+
+  // Archiving was what closing a report used to mean, before there was
+  // anywhere to say why. Anything already archived is resolved.
+  if (columns.has("archived_at")) {
+    db.exec(
+      "UPDATE reports SET status = 'resolved' WHERE archived_at IS NOT NULL AND status = 'new'",
+    );
+  }
+
+  // After the column exists, not in the block above: on a database from an
+  // older build there is nothing to index until this has run.
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status, received_at)",
+  );
 }
 
 export function closeDb(): void {
@@ -105,6 +149,31 @@ export function closeDb(): void {
 
 export type ReportType = "bug" | "feedback";
 export type TriageStatus = "pending" | "done" | "error";
+
+/**
+ * What has been decided about a report, as opposed to what triage thinks of it.
+ *
+ * `new` and `open` are the two that are still yours to deal with, and the
+ * inbox shows those by default. The other three are ways of being done: fixed,
+ * decided against, or already covered by another report. A closed report is
+ * still there and still searchable — nothing here deletes one.
+ */
+export const REPORT_STATUSES = [
+  "new",
+  "open",
+  "resolved",
+  "wont_do",
+  "duplicate",
+] as const;
+
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+/** The statuses that mean somebody still has to do something. */
+export const OPEN_STATUSES: ReportStatus[] = ["new", "open"];
+
+export function isReportStatus(value: unknown): value is ReportStatus {
+  return REPORT_STATUSES.includes(value as ReportStatus);
+}
 
 export interface ReportRow {
   id: string;
@@ -137,10 +206,30 @@ export interface ReportRow {
   triage_model: string | null;
   triage_at: string | null;
   triage_error: string | null;
+  status: ReportStatus;
+  status_note: string | null;
+  status_at: string | null;
   read_at: string | null;
-  archived_at: string | null;
   notified_at: string | null;
 }
+
+/**
+ * A report without its `payload`.
+ *
+ * The payload is the whole diagnostics blob and is by far the biggest column,
+ * so a listing that returned it would be mostly bytes nobody asked for —
+ * whether the thing reading is a browser or a model going through the queue.
+ */
+export type ReportSummary = Omit<ReportRow, "payload">;
+
+/** Every column except the payload, for listings. */
+const SUMMARY_COLUMNS = `id, received_at, type, title, message, contact,
+  app_id, app_version, app_build, app_channel, app_commit, install_id,
+  platform, os_version, device_model, identity_subject, ip, user_agent,
+  triage_status, triage_attempts, triage_verdict, triage_priority,
+  triage_summary, triage_area, triage_duplicate_of, triage_reasoning,
+  triage_model, triage_at, triage_error,
+  status, status_note, status_at, read_at, notified_at`;
 
 export interface NewReport {
   id: string;
@@ -217,16 +306,21 @@ export function getReport(id: string): ReportRow | null {
 export interface ListFilter {
   type?: ReportType;
   verdict?: string;
-  status?: TriageStatus;
-  /** "inbox" hides archived reports, "archived" shows only those. */
-  shelf?: "inbox" | "archived" | "all";
+  /** What triage did with it, not what you decided. */
+  triageStatus?: TriageStatus;
+  status?: ReportStatus;
+  /** "open" is new and open, "closed" is the other three. */
+  shelf?: "open" | "closed" | "all";
   unreadOnly?: boolean;
   search?: string;
   limit: number;
   offset: number;
 }
 
-export function listReports(f: ListFilter): ReportRow[] {
+type CountFilter = Omit<ListFilter, "limit" | "offset">;
+
+/** The WHERE clause both the listing and the count are built from. */
+function whereFor(f: CountFilter): { sql: string; args: (string | number)[] } {
   const where: string[] = [];
   const args: (string | number)[] = [];
 
@@ -238,12 +332,25 @@ export function listReports(f: ListFilter): ReportRow[] {
     where.push("triage_verdict = ?");
     args.push(f.verdict);
   }
-  if (f.status) {
+  if (f.triageStatus) {
     where.push("triage_status = ?");
+    args.push(f.triageStatus);
+  }
+  if (f.status) {
+    where.push("status = ?");
     args.push(f.status);
   }
-  if (f.shelf === "archived") where.push("archived_at IS NOT NULL");
-  else if (f.shelf !== "all") where.push("archived_at IS NULL");
+  // Naming a status is a more specific ask than either shelf, so it wins. The
+  // two together would otherwise contradict each other and return nothing.
+  if (f.status) {
+    // already filtered above
+  } else if (f.shelf === "closed") {
+    where.push(`status NOT IN (${OPEN_STATUSES.map(() => "?").join(",")})`);
+    args.push(...OPEN_STATUSES);
+  } else if (f.shelf !== "all") {
+    where.push(`status IN (${OPEN_STATUSES.map(() => "?").join(",")})`);
+    args.push(...OPEN_STATUSES);
+  }
   if (f.unreadOnly) where.push("read_at IS NULL");
   if (f.search) {
     where.push("(message LIKE ? OR title LIKE ? OR triage_summary LIKE ?)");
@@ -251,52 +358,49 @@ export function listReports(f: ListFilter): ReportRow[] {
     args.push(like, like, like);
   }
 
-  const sql =
-    "SELECT * FROM reports" +
-    (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
-    " ORDER BY received_at DESC LIMIT ? OFFSET ?";
-
-  return rowsAs<ReportRow>(handle().prepare(sql).all(...args, f.limit, f.offset));
+  return { sql: where.length ? ` WHERE ${where.join(" AND ")}` : "", args };
 }
 
-export function countReports(f: Omit<ListFilter, "limit" | "offset">): number {
-  const where: string[] = [];
-  const args: (string | number)[] = [];
-  if (f.type) {
-    where.push("type = ?");
-    args.push(f.type);
-  }
-  if (f.verdict) {
-    where.push("triage_verdict = ?");
-    args.push(f.verdict);
-  }
-  if (f.status) {
-    where.push("triage_status = ?");
-    args.push(f.status);
-  }
-  if (f.shelf === "archived") where.push("archived_at IS NOT NULL");
-  else if (f.shelf !== "all") where.push("archived_at IS NULL");
-  if (f.unreadOnly) where.push("read_at IS NULL");
-  if (f.search) {
-    where.push("(message LIKE ? OR title LIKE ? OR triage_summary LIKE ?)");
-    const like = `%${f.search}%`;
-    args.push(like, like, like);
-  }
-  const sql =
-    "SELECT COUNT(*) AS n FROM reports" +
-    (where.length ? ` WHERE ${where.join(" AND ")}` : "");
-  const rows = handle().prepare(sql).all(...args);
+export function listReports(f: ListFilter): ReportSummary[] {
+  const { sql, args } = whereFor(f);
+  return rowsAs<ReportSummary>(
+    handle()
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS} FROM reports${sql}
+          ORDER BY received_at DESC LIMIT ? OFFSET ?`,
+      )
+      .all(...args, f.limit, f.offset),
+  );
+}
+
+export function countReports(f: CountFilter): number {
+  const { sql, args } = whereFor(f);
+  const rows = handle().prepare(`SELECT COUNT(*) AS n FROM reports${sql}`).all(...args);
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * Decide what happens to a report.
+ *
+ * The note is where the reason goes — a Vikunja id for something now tracked,
+ * a sentence for something turned down. A closed report keeps everything it
+ * arrived with; closing is a label, not a delete.
+ */
+export function setStatus(
+  id: string,
+  status: ReportStatus,
+  note: string | null,
+  at: string,
+): void {
+  handle()
+    .prepare("UPDATE reports SET status = ?, status_note = ?, status_at = ? WHERE id = ?")
+    .run(status, note, at, id);
 }
 
 export function markRead(id: string, at: string): void {
   handle()
     .prepare("UPDATE reports SET read_at = COALESCE(read_at, ?) WHERE id = ?")
     .run(at, id);
-}
-
-export function setArchived(id: string, at: string | null): void {
-  handle().prepare("UPDATE reports SET archived_at = ? WHERE id = ?").run(at, id);
 }
 
 export function setNotified(id: string, at: string): void {
@@ -463,6 +567,7 @@ export function claimAssertion(jti: string, expiresAt: number): boolean {
 
 export interface Stats {
   total: number;
+  open: number;
   unread: number;
   pending: number;
   bugs: number;
@@ -474,9 +579,14 @@ export function stats(): Stats {
     const rows = handle().prepare(sql).all(...args);
     return Number(rows[0]?.n ?? 0);
   };
+  const openList = OPEN_STATUSES.map(() => "?").join(",");
   return {
     total: one("SELECT COUNT(*) AS n FROM reports"),
-    unread: one("SELECT COUNT(*) AS n FROM reports WHERE read_at IS NULL AND archived_at IS NULL"),
+    open: one(`SELECT COUNT(*) AS n FROM reports WHERE status IN (${openList})`, ...OPEN_STATUSES),
+    unread: one(
+      `SELECT COUNT(*) AS n FROM reports WHERE read_at IS NULL AND status IN (${openList})`,
+      ...OPEN_STATUSES,
+    ),
     pending: one("SELECT COUNT(*) AS n FROM reports WHERE triage_status = 'pending'"),
     bugs: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'bug'"),
     feedback: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'feedback'"),

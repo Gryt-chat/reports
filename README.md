@@ -184,6 +184,27 @@ unsorted.
 The report text goes to the model as data to classify, and the model is told as
 much, since it is whatever a stranger typed.
 
+## Statuses
+
+Triage says what a report looks like. The status says what you decided about it,
+and they are separate on purpose — the model's opinion should never be the
+record of what happened.
+
+| Status | |
+|---|---|
+| `new` | Nobody has decided anything. Where every report starts. |
+| `open` | Real, and still yours to deal with. |
+| `resolved` | Done. |
+| `wont_do` | Decided against. |
+| `duplicate` | Already covered by another report. |
+
+`new` and `open` are what the inbox shows by default. The other three take a
+report off the default list and change nothing else — it keeps its message, its
+diagnostics and its place in search. Nothing here deletes a report.
+
+Each decision can carry a note, which is where the reason goes: a Vikunja id for
+something now tracked, a sentence for something turned down.
+
 ## The inbox
 
 `/admin`, behind `REPORTS_ADMIN_TOKEN`. Open it once with `?token=…` and the
@@ -194,13 +215,21 @@ Server-rendered, no build step and no client JavaScript, because the whole page
 is text strangers wrote. The same data is available as JSON:
 
 ```
-GET  /admin/api/reports?type=bug&verdict=actionable&status=pending&shelf=inbox&q=voice&page=2
+GET  /admin/api/reports?shelf=open&type=bug&verdict=actionable&status=resolved&triage=pending&q=voice&page=2
 GET  /admin/api/reports/<id>
 GET  /admin/api/stats
+POST /admin/api/reports/<id>/status   {"status":"resolved","note":"GRYT-512"}
+POST /admin/api/reports/<id>/retriage
 GET  /admin/api/bans
-POST /admin/api/bans            {"kind":"install","value":"…","reason":"…","expiresAt":null}
+POST /admin/api/bans                  {"kind":"install","value":"…","reason":"…","expiresAt":null}
 POST /admin/api/bans/<id>/delete
 ```
+
+`shelf` is `open` (the default), `closed` or `all`; a named `status` overrides
+it. `triage` filters on whether the pass has run, `status` on what you decided.
+A listing leaves out the `payload` — the diagnostics blob is most of a report's
+bytes, and it is there on the single-report route when it is wanted. That keeps
+the queue cheap to read for a person and for anything else going through it.
 
 Set `REPORTS_DISCORD_WEBHOOK_URL` and each report is posted to Discord as it
 arrives (`REPORTS_NOTIFY_ON=receive`) or once triage has looked at it (`triage`,
