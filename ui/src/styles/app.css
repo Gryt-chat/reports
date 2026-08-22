@@ -362,3 +362,18 @@ a {
     transition-duration: 100ms !important;
   }
 }
+
+/* The settled toggle. Sits between the views and the search because it changes
+   what every one of them shows, rather than being a view of its own. */
+.rail__settled {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 1rem 0.5rem;
+  cursor: pointer;
+}
+
+.rail__settled input {
+  accent-color: var(--gryt-accent-9);
+  cursor: pointer;
+}

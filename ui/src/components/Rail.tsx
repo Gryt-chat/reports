@@ -7,8 +7,13 @@ import { QueueRow } from "./QueueRow";
 /**
  * The named views, in the order somebody actually works through them.
  *
- * Open first because that is the job; the closed shelves are here so a decision
- * can be found again, not so they can be browsed.
+ * Open first because that is the job. None of these carry a shelf: whether
+ * settled reports are included is the toggle below, so it survives moving
+ * between views instead of being a property of one of them.
+ *
+ * "Everything" used to mean `shelf=all`, which made the one view broad enough
+ * to browse also the only view showing work already done — and with every
+ * report settled it was the only view with anything in it at all.
  */
 const VIEWS: { label: string; params: string }[] = [
   { label: "Open", params: "" },
@@ -17,9 +22,10 @@ const VIEWS: { label: string; params: string }[] = [
   { label: "Feedback", params: "type=feedback" },
   { label: "Actionable", params: "verdict=actionable" },
   { label: "Untriaged", params: "triage=pending" },
-  { label: "Resolved", params: "status=resolved" },
-  { label: "Everything", params: "shelf=all" },
 ];
+
+/** Everything that is no longer waiting on anybody. */
+const SETTLED_LABEL = "Show settled";
 
 interface RailProps {
   reports: ReportSummary[];
@@ -30,9 +36,32 @@ interface RailProps {
   who: string | null;
 }
 
+/** A view's link, carrying the settled toggle across so it does not reset. */
+function viewHref(viewParams: string, showSettled: boolean): string {
+  const next = new URLSearchParams(viewParams);
+  if (showSettled) next.set("shelf", "all");
+  const query = next.toString();
+  return query ? `/?${query}` : "/";
+}
+
 export function Rail({ reports, total, stats, loading, selectedId, who }: RailProps) {
   const [params, setParams] = useSearchParams();
-  const active = params.toString();
+
+  /* The shelf is a toggle rather than a view, so it must not decide which view
+     is highlighted — otherwise turning it on makes every chip look inactive. */
+  const withoutShelf = new URLSearchParams(params);
+  withoutShelf.delete("shelf");
+  withoutShelf.delete("page");
+  const active = withoutShelf.toString();
+  const showSettled = params.get("shelf") === "all";
+
+  const toggleSettled = (on: boolean) => {
+    const next = new URLSearchParams(params);
+    if (on) next.set("shelf", "all");
+    else next.delete("shelf");
+    next.delete("page");
+    setParams(next, { replace: true });
+  };
 
   return (
     <aside className="rail">
@@ -54,7 +83,7 @@ export function Rail({ reports, total, stats, loading, selectedId, who }: RailPr
           return (
             <Link
               key={view.label}
-              to={view.params ? `/?${view.params}` : "/"}
+              to={viewHref(view.params, showSettled)}
               aria-current={isActive ? "page" : undefined}
               style={{ textDecoration: "none" }}
             >
@@ -63,6 +92,17 @@ export function Rail({ reports, total, stats, loading, selectedId, who }: RailPr
           );
         })}
       </nav>
+
+      {/* Off by default. Settled reports are kept so a decision can be found
+          again, not so they sit in front of the ones still waiting. */}
+      <label className="rail__settled">
+        <input
+          type="checkbox"
+          checked={showSettled}
+          onChange={(event) => toggleSettled(event.target.checked)}
+        />
+        <span className="rail__who">{SETTLED_LABEL}</span>
+      </label>
 
       <div className="rail__search">
         <TextField
