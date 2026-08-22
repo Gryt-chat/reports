@@ -113,6 +113,33 @@ export interface Config {
     projectId: number;
   };
 
+  /**
+   * The weekly digest, and where it is sent from.
+   *
+   * `GRYT_SMTP_*` rather than a set of its own, because the box already has
+   * those pointed at Postmark for the rest of Gryt. A second copy would be a
+   * second thing to rotate.
+   *
+   * Without a host the digest does not run and the service starts as normal.
+   * It is an addition, not a dependency.
+   */
+  digest: {
+    enabled: boolean;
+    /** Day of week to send on, 0 = Sunday. */
+    day: number;
+    /** Hour, local to the service's clock. */
+    hour: number;
+    smtp: {
+      host: string;
+      port: number;
+      user: string | null;
+      pass: string | null;
+      from: string;
+      fromName: string;
+      replyTo: string | null;
+    };
+  };
+
   discordWebhookUrl: string | null;
   /** Notify on arrival, after triage, or not at all. */
   notifyOn: "receive" | "triage" | "never";
@@ -275,6 +302,26 @@ export function loadConfig(): Config {
       token: process.env.REPORTS_VIKUNJA_TOKEN?.trim() || null,
       projectId: int("REPORTS_VIKUNJA_PROJECT", 2, 1, 1_000_000),
     },
+    digest: (() => {
+      const host = process.env.GRYT_SMTP_HOST?.trim() || "";
+      // Quotes survive being read out of a .env by some shells, and an address
+      // wrapped in them is a bounce nobody sees until they look for the digest.
+      const unquote = (v: string | undefined) => v?.trim().replace(/^"|"$/g, "") || "";
+      return {
+        enabled: bool("REPORTS_DIGEST_ENABLED", Boolean(host)),
+        day: int("REPORTS_DIGEST_DAY", 1, 0, 6),
+        hour: int("REPORTS_DIGEST_HOUR", 9, 0, 23),
+        smtp: {
+          host,
+          port: int("GRYT_SMTP_PORT", 587, 1, 65535),
+          user: process.env.GRYT_SMTP_USER?.trim() || null,
+          pass: process.env.GRYT_SMTP_PASS || null,
+          from: unquote(process.env.GRYT_SMTP_FROM) || "hello@gryt.chat",
+          fromName: unquote(process.env.GRYT_SMTP_FROM_NAME) || "Gryt",
+          replyTo: unquote(process.env.GRYT_SMTP_REPLY_TO) || null,
+        },
+      };
+    })(),
 
     discordWebhookUrl: process.env.REPORTS_DISCORD_WEBHOOK_URL?.trim() || null,
     notifyOn: (process.env.REPORTS_NOTIFY_ON as Config["notifyOn"]) || "triage",

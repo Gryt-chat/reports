@@ -7,6 +7,7 @@ import { checkAppKey, verifyIdentity } from "./auth.ts";
 import { Dashboard } from "./dashboard.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { closeDb, getReport, initDb, insertReport } from "./db.ts";
+import { Digest } from "./digest.ts";
 import {
   applyCors,
   clientIp,
@@ -38,11 +39,14 @@ async function main(): Promise<void> {
   });
   triager.start();
 
+  const digest = new Digest(config);
+  digest.start();
+
   const oidc = oidcFrom(config);
   const dashboard = new Dashboard(config.uiDir);
 
   const server = http.createServer((req, res) => {
-    void handle(req, res, config, triager, oidc, dashboard).catch((err) => {
+    void handle(req, res, config, triager, oidc, dashboard, digest).catch((err) => {
       respondToError(res, err);
     });
   });
@@ -93,6 +97,7 @@ async function handle(
   triager: Triager,
   oidc: OidcConfig | null,
   dashboard: Dashboard,
+  digest: Digest,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   applyCors(req, res, config.corsOrigins);
@@ -118,7 +123,7 @@ async function handle(
   }
 
   if (url.pathname.startsWith("/admin")) {
-    await handleAdmin(req, res, url, config, oidc, dashboard, triager.model);
+    await handleAdmin(req, res, url, config, oidc, dashboard, triager.model, digest);
     return;
   }
 

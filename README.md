@@ -278,6 +278,31 @@ prompted it rather than rewritten from scratch six weeks later.
 
 `REPORTS_VIKUNJA_TOKEN` is a write credential for the board. Without it the
 button is not offered at all.
+## The weekly digest
+
+Nothing else tells anybody a report arrived. The inbox is a page somebody has
+to remember to open, and one nobody is reminded of is one nobody reads — which
+is the same outcome as not having taken the report.
+
+Once a week: how many bugs and how much feedback arrived, each with the change
+since the week before, the totals all told, and which app they came from.
+Everyone on the allowlist with a verified address gets their own copy.
+
+A quiet week still sends. Zero is information — it says the apps are quiet and
+the service is alive. Skipping the send would make "nothing arrived" and "the
+digest is broken" look identical from the outside.
+
+`/admin/digest/preview` renders the template with made-up numbers, so a change
+to it can be looked at without waiting for a Monday. `?live=1` for the real
+week. `POST /admin/api/digest/send` sends now.
+
+SMTP is the `GRYT_SMTP_*` set the rest of Gryt uses. Without a host the digest
+does not run and the service starts as normal.
+
+The mail is built from `@gryt/ui`'s own tokens and component geometry — Surface
+at radius 20 with a 1px border, Button as a pill, the shipped palette — written
+out by hand in `digestMail.ts`, because an email has neither React nor custom
+properties. That list is what to check when the library moves.
 
 ## Statuses
 
