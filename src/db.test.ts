@@ -6,8 +6,14 @@ import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
 
 import {
+  addAdmin,
   closeDb,
+  countAdmins,
   countReports,
+  findAdmin,
+  listAdmins,
+  removeAdmin,
+  touchAdmin,
   getReport,
   initDb,
   insertReport,
@@ -130,4 +136,53 @@ test("a database from before statuses gains them, archived meaning resolved", ()
 
   const id = store();
   assert.equal(getReport(id)?.status, "new", "the migrated table still takes new reports");
+});
+
+test("somebody can be added before they have ever signed in", () => {
+  addAdmin({
+    id: "adm_gf",
+    identifier: "partner@example.com",
+    note: "on the board",
+    addedAt: new Date().toISOString(),
+    addedBy: "sivert",
+  });
+
+  // She signs in: Keycloak knows her by a user id we had never seen, and the
+  // email on the list is what lets her through the first time.
+  const entry = findAdmin("kc-user-2", "partner", "partner@example.com");
+  assert.equal(entry?.id, "adm_gf");
+
+  touchAdmin(entry!.id, "kc-user-2", "partner", new Date().toISOString());
+
+  // From here it matches on the user id, which a profile edit cannot change.
+  assert.equal(findAdmin("kc-user-2", "someone-else", null)?.id, "adm_gf");
+  assert.equal(findAdmin("kc-user-2", "partner", "partner@example.com")?.name, "partner");
+});
+
+test("a stranger with a Gryt account is still a stranger", () => {
+  assert.equal(findAdmin("kc-user-99", "randomer", "randomer@example.com"), null);
+});
+
+test("an email on somebody else's pinned entry does not let them in", () => {
+  // Once an entry is pinned to a user id, the email that seeded it stops being
+  // a way in — otherwise anyone who could set that address on their own
+  // account would inherit the access.
+  assert.equal(findAdmin("kc-user-3", "impostor", "partner@example.com"), null);
+});
+
+test("adding the same person twice updates rather than duplicates", () => {
+  const before = countAdmins();
+  addAdmin({
+    id: "adm_gf_again",
+    identifier: "partner@example.com",
+    note: "still on the board",
+    addedAt: new Date().toISOString(),
+    addedBy: "sivert",
+  });
+
+  assert.equal(countAdmins(), before);
+  assert.equal(listAdmins().find((a) => a.id === "adm_gf")?.note, "still on the board");
+
+  removeAdmin("adm_gf");
+  assert.equal(countAdmins(), before - 1);
 });

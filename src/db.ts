@@ -91,6 +91,27 @@ export function initDb(dataDir: string): void {
 
     CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events (bucket, at);
 
+    -- Who may read the inbox.
+    --
+    -- Keycloak says who somebody is; this says whether they get in. Somebody
+    -- is added by whatever you know about them — their Keycloak user id if you
+    -- have it, otherwise their username or email — and the id is filled in the
+    -- first time they sign in, so later matches are on the one thing that
+    -- cannot be changed by editing a profile.
+    CREATE TABLE IF NOT EXISTS admins (
+      id            TEXT PRIMARY KEY,
+      identifier    TEXT NOT NULL,
+      subject       TEXT,
+      name          TEXT,
+      note          TEXT,
+      added_at      TEXT NOT NULL,
+      added_by      TEXT,
+      last_seen_at  TEXT
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_identifier ON admins (identifier);
+    CREATE INDEX IF NOT EXISTS idx_admins_subject ON admins (subject);
+
     -- Signature replay protection: a jti is good once.
     CREATE TABLE IF NOT EXISTS seen_assertions (
       jti        TEXT PRIMARY KEY,
@@ -563,6 +584,91 @@ export function claimAssertion(jti: string, expiresAt: number): boolean {
     expiresAt,
   );
   return true;
+}
+
+export interface AdminRow {
+  id: string;
+  /** What was typed when they were added: a user id, a username or an email. */
+  identifier: string;
+  /** The Keycloak user id, once they have signed in at least once. */
+  subject: string | null;
+  name: string | null;
+  note: string | null;
+  added_at: string;
+  added_by: string | null;
+  last_seen_at: string | null;
+}
+
+export function listAdmins(): AdminRow[] {
+  return rowsAs<AdminRow>(
+    handle().prepare("SELECT * FROM admins ORDER BY added_at ASC").all(),
+  );
+}
+
+export function countAdmins(): number {
+  const rows = handle().prepare("SELECT COUNT(*) AS n FROM admins").all();
+  return Number(rows[0]?.n ?? 0);
+}
+
+export function addAdmin(row: {
+  id: string;
+  identifier: string;
+  note: string | null;
+  addedAt: string;
+  addedBy: string | null;
+}): void {
+  handle()
+    .prepare(
+      `INSERT INTO admins (id, identifier, note, added_at, added_by)
+       VALUES (?,?,?,?,?)
+       ON CONFLICT (identifier) DO UPDATE SET note = excluded.note`,
+    )
+    .run(row.id, row.identifier, row.note, row.addedAt, row.addedBy);
+}
+
+export function removeAdmin(id: string): void {
+  handle().prepare("DELETE FROM admins WHERE id = ?").run(id);
+}
+
+/**
+ * Find the entry admitting this person.
+ *
+ * Matched on the Keycloak user id first, since that is the one thing about an
+ * account nobody can change. Username and email are how somebody gets added
+ * before they have ever signed in, and stop being consulted for that entry the
+ * moment the id is known.
+ */
+export function findAdmin(
+  subject: string,
+  username: string,
+  email: string | null,
+): AdminRow | null {
+  const rows = rowsAs<AdminRow>(
+    handle()
+      .prepare(
+        `SELECT * FROM admins
+          WHERE subject = ?
+             OR (subject IS NULL AND (
+                   LOWER(identifier) = LOWER(?)
+                OR LOWER(identifier) = LOWER(?)
+                OR identifier = ?))
+          LIMIT 1`,
+      )
+      .all(subject, username, email ?? "\u0000no-email", subject),
+  );
+  return rows[0] ?? null;
+}
+
+/** Record that they were here, and pin the entry to their user id. */
+export function touchAdmin(
+  id: string,
+  subject: string,
+  name: string,
+  at: string,
+): void {
+  handle()
+    .prepare("UPDATE admins SET subject = ?, name = ?, last_seen_at = ? WHERE id = ?")
+    .run(subject, name, at, id);
 }
 
 export interface Stats {
