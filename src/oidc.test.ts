@@ -62,7 +62,9 @@ before(async () => {
         lastTokenRequest = new URLSearchParams(body);
         void new SignJWT({
           preferred_username: "sivert",
-          email: "sivert@frifor.app",
+          // example.test, which RFC 6761 reserves and nothing resolves. A real
+          // address in a fixture is a real address in a public repository.
+          email: "sivert@example.test",
           email_verified: emailVerified,
         })
           .setProtectedHeader({ alg: "RS256", kid: "test" })
@@ -121,7 +123,7 @@ test("turns a code into the person the realm vouched for", async () => {
 
   assert.equal(person.subject, "kc-user-1");
   assert.equal(person.name, "sivert");
-  assert.equal(person.email, "sivert@frifor.app");
+  assert.equal(person.email, "sivert@example.test");
 
   assert.equal(lastTokenRequest?.get("code"), "the-code");
   assert.equal(lastTokenRequest?.get("code_verifier"), "the-verifier");
