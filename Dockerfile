@@ -1,3 +1,15 @@
+# The dashboard. Its own stage because it has its own dependency tree — React
+# and Vite have no business in the image that runs the service, and only the
+# built files cross over.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS dashboard
+WORKDIR /ui
+
+COPY ui/package.json ui/yarn.lock ./
+RUN yarn install --frozen-lockfile --ignore-engines
+
+COPY ui/ ./
+RUN yarn build
+
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 WORKDIR /app
 
@@ -23,6 +35,7 @@ ENV DATA_DIR=/data
 COPY --from=deps --chown=gryt:gryt /app/node_modules ./node_modules
 COPY --from=builder --chown=gryt:gryt /app/package.json ./package.json
 COPY --from=builder --chown=gryt:gryt /app/dist ./dist
+COPY --from=dashboard --chown=gryt:gryt /dist-ui ./dist-ui
 
 # Every report anyone has ever sent lives in here. Mount it.
 RUN mkdir -p /data && chown -R gryt:gryt /data

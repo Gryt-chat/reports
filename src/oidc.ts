@@ -121,6 +121,14 @@ export interface Person {
   /** The Keycloak user id. Stable, and what the allowlist ends up holding. */
   subject: string;
   name: string;
+  /**
+   * Only set when the realm says the address has been verified.
+   *
+   * Adding somebody by email is the normal way to use the allowlist, so the
+   * email is what decides whether a stranger gets in the first time. An address
+   * anybody can type into their own profile would make that a way in rather
+   * than a check — so an unverified one is treated as no email at all.
+   */
   email: string | null;
 }
 
@@ -165,10 +173,12 @@ export async function completeLogin(
     audience: config.clientId,
   });
 
+  const verified = payload.email_verified === true;
+
   return {
     subject: String(payload.sub),
     name: String(payload.preferred_username ?? payload.email ?? payload.sub),
-    email: payload.email ? String(payload.email) : null,
+    email: verified && payload.email ? String(payload.email) : null,
   };
 }
 

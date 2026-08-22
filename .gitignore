@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-ui/
 *.log
 
 # The database. Every report anyone has ever sent lives here.
@@ -10,3 +11,4 @@ data/
 .env.*
 !.env.example
 .DS_Store
+*.tsbuildinfo

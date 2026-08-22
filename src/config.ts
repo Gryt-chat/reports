@@ -22,6 +22,8 @@ export interface Config {
   adminHost: string;
   adminPort: number;
   dataDir: string;
+  /** Where `yarn build` in ui/ put the dashboard. */
+  uiDir: string;
   version: string;
 
   /** Origins allowed to POST from a browser. The web client is one. */
@@ -160,6 +162,7 @@ export function loadConfig(): Config {
     adminHost: process.env.REPORTS_ADMIN_HOST || "127.0.0.1",
     adminPort,
     dataDir: process.env.DATA_DIR || "./data",
+    uiDir: process.env.REPORTS_UI_DIR || "./dist-ui",
     version: process.env.REPORTS_VERSION?.trim().replace(/^v/, "") || "dev",
 
     corsOrigins: list("REPORTS_CORS_ORIGINS"),
