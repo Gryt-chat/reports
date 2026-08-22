@@ -142,3 +142,64 @@ test("signature: an assertion made for something else does not work here", async
     (err: HttpError) => err.code === "bad_signature",
   );
 });
+
+/**
+ * The assertion the mobile app actually builds.
+ *
+ * Written out here rather than reusing the helper above, on purpose: this is a
+ * contract with another repository, and the point is to fail when either side
+ * drifts. Every value below mirrors `src/feedback/claims.ts` and
+ * `src/identity/keys.ts` in Gryt-chat/mobile — the bare thumbprint as `sub`
+ * (not the `key:`-prefixed subject that file also exports), the canonical
+ * member order, and the 120-second lifetime.
+ */
+async function mobileShapedAssertion(
+  signer: Signer,
+  body: Buffer,
+  iatSeconds: number,
+): Promise<string> {
+  const canonical = JSON.stringify({
+    crv: signer.publicJwk.crv,
+    kty: signer.publicJwk.kty,
+    x: signer.publicJwk.x,
+    y: signer.publicJwk.y,
+  });
+
+  return new SignJWT({
+    sub: createHash("sha256").update(canonical).digest("base64url"),
+    aud: REPORT_AUDIENCE,
+    bh: createHash("sha256").update(body).digest("base64url"),
+    jti: randomUUID(),
+    iat: iatSeconds,
+    exp: iatSeconds + 120,
+  })
+    .setProtectedHeader({ alg: "ES256", jwk: signer.publicJwk })
+    .sign(signer.privateKey);
+}
+
+test("the assertion the mobile app builds is the one this accepts", async () => {
+  const signer = await makeSigner();
+  const body = Buffer.from(JSON.stringify({ type: "bug", message: "from the phone" }));
+  const now = Math.floor(Date.now() / 1000);
+
+  const identity = await verifyIdentity(await mobileShapedAssertion(signer, body, now), body);
+  assert.equal(identity.subject, signer.thumbprint, "both sides compute the same thumbprint");
+});
+
+test("a phone with a slightly fast clock is not a stranger", async () => {
+  const signer = await makeSigner();
+  const body = Buffer.from("{}");
+  const now = Math.floor(Date.now() / 1000);
+
+  // Thirty seconds ahead is an ordinary handset, and this used to be a 401.
+  // The client sends the assertion whenever it can build one, so refusing it
+  // loses the whole report rather than only the signature.
+  await verifyIdentity(await mobileShapedAssertion(signer, body, now + 30), body);
+
+  // Far enough out that the assertion's own two minutes have expired.
+  const stale = await mobileShapedAssertion(signer, body, now - 240);
+  await assert.rejects(
+    () => verifyIdentity(stale, body),
+    (err: HttpError) => err.code === "bad_signature",
+  );
+});
