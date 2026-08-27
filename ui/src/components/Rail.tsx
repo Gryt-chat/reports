@@ -150,6 +150,12 @@ export function Rail({ reports, total, stats, loading, selectedId, who }: RailPr
           {total} {total === 1 ? "report" : "reports"}
         </span>
         <span style={{ display: "flex", gap: "0.75rem" }}>
+          {/* The count only when there is one. The page is worth reaching
+              either way — it is also where a published note is found again —
+              but a zero in the footer of every visit is not news. */}
+          <Link className="rail__who" to="/changelog">
+            Notes{stats && stats.changelogDrafts > 0 ? ` (${stats.changelogDrafts})` : ""}
+          </Link>
           <Link className="rail__who" to="/people">
             People
           </Link>

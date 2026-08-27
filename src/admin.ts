@@ -1,6 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import {
+  decide as decideChangelogDraft,
+  toEntry as changelogEntry,
+  compareVersions,
+  writePublicFile,
+} from "./changelog.ts";
 import type { Config } from "./config.ts";
 import {
   addAdmin,
@@ -13,8 +19,10 @@ import {
   touchAdmin,
   type AdminRow,
   getReport,
+  isChangelogStatus,
   isReportStatus,
   listBans,
+  listChangelogDrafts,
   listReports,
   markRead,
   removeBan,
@@ -172,7 +180,7 @@ export async function handleAdmin(
   // and they cost nothing to keep.
   const plain = path.startsWith("/admin/plain");
   if (dashboard?.available && !plain && !path.startsWith("/admin/api")) {
-    if (path === "/admin" || /^\/admin\/(reports\/[\w-]+|people)$/.test(path)) {
+    if (path === "/admin" || /^\/admin\/(reports\/[\w-]+|people|changelog)$/.test(path)) {
       markReadFor(path);
       if (dashboard.shell(res)) return;
     }
@@ -246,6 +254,21 @@ export async function handleAdmin(
 
   if (path === "/admin/api/people") {
     sendJson(res, 200, { people: listAdmins() });
+    return;
+  }
+
+  // Release notes a model drafted, waiting to be read. `?status=` narrows to
+  // one of the four; the default is everything, because a refusal is only
+  // useful if you can find it again.
+  if (path === "/admin/api/changelog") {
+    const wanted = url.searchParams.get("status") ?? undefined;
+    if (wanted !== undefined && !isChangelogStatus(wanted)) {
+      throw new HttpError(400, "invalid_status", "No such draft status");
+    }
+    const entries = listChangelogDrafts(wanted)
+      .map(changelogEntry)
+      .sort((a, b) => compareVersions(b.version, a.version));
+    sendJson(res, 200, { entries });
     return;
   }
 
@@ -397,6 +420,37 @@ async function handlePost(
 
     res.writeHead(303, { location: `/admin/reports/${id}` });
     res.end();
+    return;
+  }
+
+  // Publish a drafted release note, or refuse it.
+  //
+  // Publishing is the moment a model's prose becomes something a stranger
+  // reads, and it is the only thing standing between the drafter and the
+  // changelog page — which is the whole reason this service is where the
+  // review lives. Rejecting keeps the text: a refusal nobody can read is a
+  // refusal nobody can judge, and reading one is how the first fabricated
+  // draft was diagnosed.
+  const draftDecision = path.match(/^\/admin\/api\/changelog\/([\w-]+)\/(publish|reject)$/);
+  if (draftDecision) {
+    const [, id, verb] = draftDecision;
+    const raw = (await readBody(req, 4 * 1024)).toString("utf8");
+    const fields = (header(req, "content-type") ?? "").includes("application/json")
+      ? (JSON.parse(raw || "{}") as { note?: string })
+      : (Object.fromEntries(new URLSearchParams(raw)) as { note?: string });
+
+    const entry = decideChangelogDraft(
+      id,
+      verb === "publish" ? "published" : "rejected",
+      fields.note?.toString().trim().slice(0, 500) || null,
+      actor.kind === "person" ? actor.name : "the admin token",
+      new Date().toISOString(),
+    );
+
+    // Before the response, so a 200 means the page has it rather than that the
+    // database does.
+    const written = writePublicFile(config);
+    sendJson(res, 200, { id: entry.id, status: entry.status, published: written });
     return;
   }
 

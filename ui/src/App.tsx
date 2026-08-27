@@ -11,6 +11,7 @@ import {
   type ReportSummary,
   type Stats,
 } from "./lib/api";
+import { Changelog } from "./views/Changelog";
 import { People } from "./views/People";
 import { ReportView } from "./views/ReportView";
 
@@ -89,6 +90,14 @@ export function App() {
         element={
           <main className="stage">
             <People />
+          </main>
+        }
+      />
+      <Route
+        path="/changelog"
+        element={
+          <main className="stage">
+            <Changelog />
           </main>
         }
       />

@@ -316,6 +316,129 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* ── Drafted release notes ─────────────────────────────────────────────── */
+
+/* A chip that acts as a button. The Chip inside carries the whole appearance,
+   so this only has to stop the button element from bringing its own. */
+.shelf {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.note {
+  border: var(--rule);
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-md);
+  padding: var(--space-lg);
+}
+
+.note__head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  justify-content: space-between;
+}
+
+.note__source {
+  color: var(--color-ink-2);
+  font-size: var(--text-xs);
+  margin-top: var(--space-xs);
+}
+
+/* Why a draft was refused, in the words of whoever refused it. */
+.note__why {
+  border-left: 2px solid var(--color-danger);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  margin-top: var(--space-sm);
+  padding-left: var(--space-sm);
+}
+
+/* The note as the changelog page would set it: prose, one column, at a
+   measure somebody can actually read a paragraph at. */
+.note__body {
+  border-top: var(--rule);
+  margin-top: var(--space-md);
+  max-width: 40rem;
+  padding-top: var(--space-md);
+}
+
+.note__body p {
+  margin: 0 0 var(--space-sm);
+}
+
+.note__body section {
+  margin-top: var(--space-lg);
+}
+
+.note__body h3 {
+  margin-bottom: var(--space-xs);
+}
+
+.note__recap {
+  border-top: var(--rule);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+}
+
+.note__group {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: var(--space-sm) 0 var(--space-2xs);
+}
+
+.note__recap ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+}
+
+.note__commits {
+  border-top: var(--rule);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+}
+
+.note__toggle {
+  background: none;
+  border: 0;
+  color: var(--color-ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* What the note is checked against. Two columns where there is room, because
+   a claim and the commit it came from want to be readable side by side. */
+.commits {
+  display: grid;
+  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  margin-top: var(--space-md);
+}
+
+.commit {
+  margin-bottom: var(--space-sm);
+}
+
+.commit__subject {
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.commit__body {
+  color: var(--color-ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  margin: var(--space-2xs) 0 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
 /* ── Mobile ────────────────────────────────────────────────────────────── */
 
 @media (max-width: 60rem) {

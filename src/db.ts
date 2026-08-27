@@ -115,6 +115,45 @@ export function initDb(dataDir: string): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_identifier ON admins (identifier);
     CREATE INDEX IF NOT EXISTS idx_admins_subject ON admins (subject);
 
+    -- Release notes drafted by ops/internal/changelog-notes.mjs, waiting to be
+    -- read.
+    --
+    -- The drafter used to write the file the changelog page fetches, so a note
+    -- no human had read was live the moment the model finished it. Two
+    -- fabricated drafts were caught by reading them during that work and
+    -- reading was not a step in the pipeline. Now the drafter posts here and
+    -- nothing reaches the page until somebody presses Publish.
+    --
+    -- The commits column is the range the note was drafted from, kept because
+    -- checking a claim against the commits is the whole review. It is never
+    -- written to the file the site reads.
+    CREATE TABLE IF NOT EXISTS changelog_drafts (
+      id          TEXT PRIMARY KEY,
+      version     TEXT NOT NULL,
+      date        TEXT NOT NULL,
+      channel     TEXT NOT NULL,
+      headline    TEXT NOT NULL,
+      intro       TEXT NOT NULL,
+      sections    TEXT NOT NULL,
+      recap       TEXT NOT NULL,
+      source      TEXT,
+      commits     TEXT,
+      status      TEXT NOT NULL DEFAULT 'draft',
+      drafted_at  TEXT NOT NULL,
+      decided_at  TEXT,
+      decided_by  TEXT,
+      note        TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_changelog_status ON changelog_drafts (status, version);
+
+    -- One row per version that is still in play. A rejected or superseded draft
+    -- is kept for reading and is deliberately outside this, so the same version
+    -- can carry a refusal and a later attempt at once.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_changelog_live
+      ON changelog_drafts (version)
+      WHERE status IN ('draft', 'published');
+
     -- Signature replay protection: a jti is good once.
     CREATE TABLE IF NOT EXISTS seen_assertions (
       jti        TEXT PRIMARY KEY,
@@ -867,6 +906,8 @@ export interface Stats {
   pending: number;
   bugs: number;
   feedback: number;
+  /** Release notes drafted and not yet read. */
+  changelogDrafts: number;
 }
 
 export function stats(): Stats {
@@ -885,5 +926,154 @@ export function stats(): Stats {
     pending: one("SELECT COUNT(*) AS n FROM reports WHERE triage_status = 'pending'"),
     bugs: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'bug'"),
     feedback: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'feedback'"),
+    changelogDrafts: one(
+      "SELECT COUNT(*) AS n FROM changelog_drafts WHERE status = 'draft'",
+    ),
   };
+}
+
+/* ── Drafted release notes ───────────────────────────────────────────────── */
+
+/**
+ * Where a drafted note is in its one review.
+ *
+ * `draft` is waiting to be read, `published` is on the changelog page, and
+ * `rejected` is a refusal kept so it can be looked at — which is how the first
+ * fabricated draft was diagnosed at all. `superseded` is an older attempt at a
+ * version that has been drafted again; it is kept for the same reason and is
+ * never offered for a decision.
+ */
+export const CHANGELOG_STATUSES = ["draft", "published", "rejected", "superseded"] as const;
+
+export type ChangelogStatus = (typeof CHANGELOG_STATUSES)[number];
+
+export function isChangelogStatus(value: unknown): value is ChangelogStatus {
+  return CHANGELOG_STATUSES.includes(value as ChangelogStatus);
+}
+
+/** The two statuses a version can only hold one of at a time. */
+const LIVE_CHANGELOG_STATUSES: ChangelogStatus[] = ["draft", "published"];
+
+export interface ChangelogRow {
+  id: string;
+  version: string;
+  date: string;
+  channel: string;
+  headline: string;
+  /** JSON, as stored. `changelog.ts` is what turns these back into arrays. */
+  intro: string;
+  sections: string;
+  recap: string;
+  source: string | null;
+  commits: string | null;
+  status: ChangelogStatus;
+  drafted_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+  note: string | null;
+}
+
+export interface NewChangelogDraft {
+  id: string;
+  version: string;
+  date: string;
+  channel: string;
+  headline: string;
+  intro: string;
+  sections: string;
+  recap: string;
+  source: string | null;
+  commits: string | null;
+  draftedAt: string;
+}
+
+export function insertChangelogDraft(d: NewChangelogDraft): void {
+  handle()
+    .prepare(
+      `INSERT INTO changelog_drafts (
+         id, version, date, channel, headline, intro, sections, recap,
+         source, commits, drafted_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      d.id,
+      d.version,
+      d.date,
+      d.channel,
+      d.headline,
+      d.intro,
+      d.sections,
+      d.recap,
+      d.source,
+      d.commits,
+      d.draftedAt,
+    );
+}
+
+export function getChangelogDraft(id: string): ChangelogRow | null {
+  const rows = rowsAs<ChangelogRow>(
+    handle().prepare("SELECT * FROM changelog_drafts WHERE id = ?").all(id),
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Every draft, newest version first.
+ *
+ * Sorted in SQLite by the string, which is wrong for 1.6.9 against 1.6.10 —
+ * `changelog.ts` sorts properly before anything is shown or written. This
+ * order only decides what a caller sees before that.
+ */
+export function listChangelogDrafts(status?: ChangelogStatus): ChangelogRow[] {
+  const sql = status
+    ? "SELECT * FROM changelog_drafts WHERE status = ? ORDER BY version DESC"
+    : "SELECT * FROM changelog_drafts ORDER BY version DESC";
+  return rowsAs<ChangelogRow>(
+    status ? handle().prepare(sql).all(status) : handle().prepare(sql).all(),
+  );
+}
+
+/** What the drafter uses to decide it has nothing to do for a version. */
+export function changelogVersions(): string[] {
+  return handle()
+    .prepare("SELECT DISTINCT version FROM changelog_drafts WHERE status != 'superseded'")
+    .all()
+    .map((row) => String(row.version));
+}
+
+/** The draft or published note for a version, if there is one. */
+export function liveChangelogFor(version: string): ChangelogRow | null {
+  const marks = LIVE_CHANGELOG_STATUSES.map(() => "?").join(",");
+  const rows = rowsAs<ChangelogRow>(
+    handle()
+      .prepare(`SELECT * FROM changelog_drafts WHERE version = ? AND status IN (${marks})`)
+      .all(version, ...LIVE_CHANGELOG_STATUSES),
+  );
+  return rows[0] ?? null;
+}
+
+export function decideChangelog(
+  id: string,
+  status: ChangelogStatus,
+  note: string | null,
+  by: string | null,
+  at: string,
+): void {
+  handle()
+    .prepare(
+      `UPDATE changelog_drafts
+          SET status = ?, note = ?, decided_by = ?, decided_at = ?
+        WHERE id = ?`,
+    )
+    .run(status, note, by, at, id);
+}
+
+/** Everything the site is allowed to see: drafted and published, in that order. */
+export function publishableChangelog(): ChangelogRow[] {
+  const marks = LIVE_CHANGELOG_STATUSES.map(() => "?").join(",");
+  return rowsAs<ChangelogRow>(
+    handle()
+      .prepare(`SELECT * FROM changelog_drafts WHERE status IN (${marks})`)
+      .all(...LIVE_CHANGELOG_STATUSES),
+  );
 }
