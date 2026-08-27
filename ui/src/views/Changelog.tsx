@@ -376,10 +376,11 @@ function Decide({ note, setNote, busy, onDecide }: DecideProps) {
   );
 }
 
-/** `since 1.6.42 · 7 commits · qwen3:32b`, skipping whatever is missing. */
+/** `The app, The server · since 1.6.42 · 7 commits · qwen3:32b`, skipping what is missing. */
 function source(entry: ChangelogEntry): string {
   const commits = entry.source?.commits;
   return [
+    entry.source?.components?.length ? entry.source.components.join(", ") : null,
     entry.source?.since ? `since ${entry.source.since}` : "range unknown",
     commits ? `${commits} commit${commits === 1 ? "" : "s"}` : null,
     entry.source?.model,
