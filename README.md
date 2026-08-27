@@ -308,6 +308,71 @@ at radius 20 with a 1px border, Button as a pill, the shipped palette — writte
 out by hand in `digestMail.ts`, because an email has neither React nor custom
 properties. That list is what to check when the library moves.
 
+## Reading a drafted release note
+
+A drafted release note is not a report. It is here because the inbox is already
+where things wait for Sivert to decide about them, and already behind a Keycloak
+sign-in.
+
+`ops/internal/changelog-notes.mjs` in the superproject runs on the box after a
+release. It diffs `.release/manifest.json` between that release and the one
+before it, takes the commit range in each submodule, and asks the local model
+for the prose. It used to write the file the changelog page fetches, which meant
+a note nobody had read was public the moment the model finished writing it.
+
+Two fabricated drafts were caught by reading them while that was being built.
+One retold a different release wholesale. The other was a paraphrase: a section
+headed "Security improvements for identity and account tokens", about keychain
+encryption, in a release whose commit range does not contain the word keychain.
+It read like the rest of the note and it scored under the word-overlap guard the
+drafter runs.
+
+`/admin/changelog` is a queue with a stage, the same shape as the inbox: the
+notes waiting on the left, the one you picked on the right, and the commit range
+it was drafted from beside the prose. What caught the paraphrase was reading a
+claim and going to look for it, so the commits are on the page rather than a link
+away. It is a queue rather than a list because there are 42 stable releases and
+three notes written by hand, so the first backfill puts about 35 here at once.
+
+**Publish** puts it on the changelog page. Seconds, and no rebuild, since the
+site fetches the file at runtime. **Reject** keeps the text and frees the version,
+so the drafter has another go on its next tick — rejecting a draft is how you ask
+for a better one. A refusal nobody can read is a refusal nobody can check, and
+reading one is how the first fabricated draft was diagnosed. Either decision lands
+you on the next note still waiting.
+
+`/admin/plain/changelog` is the same thing server-rendered, for when the
+dashboard build is broken. The gate is the only route a drafted note has to the
+changelog page, so without a fallback a bad build would mean notes piling up with
+no way to publish any of them.
+
+| | |
+|---|---|
+| `POST /v1/changelog` | Take a draft. `?force=1` replaces the one a version already has. |
+| `GET /v1/changelog/versions` | What the drafter already had a go at, so it does not spend a model on it twice. |
+| `GET /admin/api/changelog` | Everything, or one `?status=`. |
+| `POST /admin/api/changelog/<id>/publish` | |
+| `POST /admin/api/changelog/<id>/reject` | Body `{ "note": "why not" }`. |
+
+The two decision routes also answer under `/admin/plain/changelog/<id>/…`, which
+is where the plain pages post their forms; those take a form-encoded body and
+redirect back to the list rather than answering JSON.
+
+Both `/v1` routes want `X-Gryt-Changelog-Key`, which is separate from the app
+keys: those ship inside a public binary, and this one writes to a page. Without
+`REPORTS_CHANGELOG_KEY` the routes are not there at all.
+
+`REPORTS_CHANGELOG_FILE` is where `changelog.json` is written: the path nginx
+serves beside the site, bind-mounted into both containers. Drafts are in that
+file carrying `status: "draft"`, because an unpublished note is not a secret. The
+changelog page renders published entries and shows the rest only under
+`?drafts=1`, which is how a note gets read on the page it would go on. The commit
+range is never in it.
+
+Set no file and nothing is published anywhere, while the inbox still takes and
+shows drafts. That is the right behaviour for any deployment of this service
+other than the one behind gryt.chat.
+
 ## Statuses
 
 Triage says what a report looks like. The status says what you decided about it,
@@ -424,6 +489,8 @@ before deploying:
 | `REPORTS_TRUSTED_PROXIES` | — | And believe it only from these addresses. Empty believes any peer, which is only right when nothing but the proxy can reach the port. |
 | `REPORTS_CORS_ORIGINS` | — | Browser origins allowed to POST. The web client needs listing. |
 | `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
+| `REPORTS_CHANGELOG_KEY` | — | Lets the changelog drafter post. Without it those routes do not exist. |
+| `REPORTS_CHANGELOG_FILE` | — | Where `changelog.json` is written for the site to fetch. |
 
 ```sh
 docker run -v gryt-reports:/data -p 8080:8080 \

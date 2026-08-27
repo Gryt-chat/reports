@@ -316,6 +316,128 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* ── Drafted release notes ─────────────────────────────────────────────── */
+
+/* A chip that acts as a button. The Chip inside carries the whole appearance,
+   so this only has to stop the button element from bringing its own. */
+.shelf {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.note__source {
+  color: var(--color-ink-2);
+  font-size: var(--text-xs);
+  margin-top: var(--space-xs);
+}
+
+/* Why a draft was refused, in the words of whoever refused it. */
+.note__why {
+  border-left: 2px solid var(--color-danger);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  margin-top: var(--space-sm);
+  padding-left: var(--space-sm);
+}
+
+/* The note and the commits it came from, side by side where there is room.
+   Beside rather than under, because checking a claim means looking at both at
+   once and a reader who has to scroll between them stops doing it. */
+.note__split {
+  border-top: var(--rule);
+  display: grid;
+  gap: var(--space-xl);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  margin-top: var(--space-md);
+  padding-top: var(--space-lg);
+}
+
+@media (max-width: 68rem) {
+  .note__split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The note as the changelog page would set it: prose, one column, at a
+   measure somebody can actually read a paragraph at. */
+.note__body {
+  max-width: 40rem;
+}
+
+.note__body p {
+  margin: 0 0 var(--space-sm);
+}
+
+.note__body section {
+  margin-top: var(--space-lg);
+}
+
+.note__body h3 {
+  margin-bottom: var(--space-xs);
+}
+
+.note__recap {
+  border-top: var(--rule);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+}
+
+.note__group {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: var(--space-sm) 0 var(--space-2xs);
+}
+
+.note__recap ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+}
+
+/* Sticky, so the commits stay on screen while the note scrolls past them.
+   The note is the long side of this pair and the range is what it is being
+   checked against. */
+.commits {
+  align-self: start;
+  border-left: var(--rule);
+  max-height: calc(100dvh - var(--space-xl) * 2);
+  overflow-y: auto;
+  padding-left: var(--space-lg);
+  position: sticky;
+  top: var(--space-xl);
+}
+
+@media (max-width: 68rem) {
+  .commits {
+    border-left: 0;
+    border-top: var(--rule);
+    max-height: none;
+    overflow-y: visible;
+    padding-left: 0;
+    padding-top: var(--space-md);
+    position: static;
+  }
+}
+
+.commit {
+  margin-bottom: var(--space-sm);
+}
+
+.commit__subject {
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.commit__body {
+  color: var(--color-ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  margin: var(--space-2xs) 0 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
 /* ── Mobile ────────────────────────────────────────────────────────────── */
 
 @media (max-width: 60rem) {

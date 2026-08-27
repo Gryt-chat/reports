@@ -1,9 +1,16 @@
 import consola from "consola";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 
 import { handleAdmin } from "./admin.ts";
 import { checkAppKey, verifyIdentity } from "./auth.ts";
+import {
+  knownVersions,
+  MAX_CHANGELOG_BODY,
+  parseDraft,
+  receiveDraft,
+  writePublicFile,
+} from "./changelog.ts";
 import { Dashboard } from "./dashboard.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { closeDb, getReport, initDb, insertReport } from "./db.ts";
@@ -44,6 +51,12 @@ async function main(): Promise<void> {
 
   const oidc = oidcFrom(config);
   const dashboard = new Dashboard(config.uiDir);
+
+  // Once at boot, so a container on a fresh volume serves a real file rather
+  // than a 404 the changelog page has to treat as "no notes yet".
+  if (config.changelog.file && writePublicFile(config)) {
+    consola.info(`[reports] release notes written to ${config.changelog.file}`);
+  }
 
   const server = http.createServer((req, res) => {
     void handle(req, res, config, triager, oidc, dashboard, digest).catch((err) => {
@@ -122,12 +135,91 @@ async function handle(
     return;
   }
 
+  if (url.pathname.startsWith("/v1/changelog")) {
+    await changelog(req, res, url, config);
+    return;
+  }
+
   if (url.pathname.startsWith("/admin")) {
     await handleAdmin(req, res, url, config, oidc, dashboard, triager.model, digest);
     return;
   }
 
   throw new HttpError(404, "not_found", "No such endpoint");
+}
+
+/**
+ * Take a drafted release note, or say which versions already have one.
+ *
+ * Not part of the report endpoint and not behind an app key: the drafter is a
+ * script on the same machine, not one of the apps, and the two should not share
+ * a credential — an app key is shipped inside a public binary, and this one
+ * writes to a page.
+ *
+ * Deliberately absent from the CORS allow-list. Nothing in a browser has any
+ * business posting a release note, so a page that tries is stopped before the
+ * key is even considered.
+ */
+async function changelog(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  config: Config,
+): Promise<void> {
+  const expected = config.changelog.key;
+  if (!expected) {
+    throw new HttpError(404, "not_found", "Nothing configured to guard drafted notes");
+  }
+
+  const given = header(req, "x-gryt-changelog-key");
+  if (!given || !keyMatches(given, expected)) {
+    throw new HttpError(401, "unauthorised", "X-Gryt-Changelog-Key is wrong or missing");
+  }
+
+  // What the drafter asks before it spends eight minutes of GPU on a release.
+  if (url.pathname === "/v1/changelog/versions" && req.method === "GET") {
+    sendJson(res, 200, { versions: knownVersions() });
+    return;
+  }
+
+  if (url.pathname !== "/v1/changelog" || req.method !== "POST") {
+    throw new HttpError(404, "not_found", "No such endpoint");
+  }
+
+  const raw = (await readBody(req, MAX_CHANGELOG_BODY)).toString("utf8");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw || "null");
+  } catch {
+    throw new HttpError(400, "invalid_json", "Body is not valid JSON");
+  }
+
+  const draft = parseDraft(parsed);
+  const result = receiveDraft(draft, {
+    force: url.searchParams.get("force") === "1",
+    now: new Date().toISOString(),
+  });
+
+  if (result.created) {
+    consola.info(`[changelog] ${draft.version} drafted, waiting to be read`);
+    // So it is readable at /changelog?drafts=1 straight away, which is where
+    // a note is easiest to judge — rendered, on the page it would go on.
+    writePublicFile(config);
+  }
+
+  sendJson(res, result.created ? 201 : 200, {
+    id: result.id,
+    version: draft.version,
+    status: result.status,
+    created: result.created,
+  });
+}
+
+function keyMatches(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 /**
