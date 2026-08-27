@@ -6,6 +6,7 @@ import {
   toEntry as changelogEntry,
   compareVersions,
   writePublicFile,
+  type ChangelogEntry,
 } from "./changelog.ts";
 import type { Config } from "./config.ts";
 import {
@@ -19,10 +20,12 @@ import {
   touchAdmin,
   type AdminRow,
   getReport,
+  getChangelogDraft,
   isChangelogStatus,
   isReportStatus,
   listBans,
   listChangelogDrafts,
+  type ChangelogStatus,
   listReports,
   markRead,
   removeBan,
@@ -180,7 +183,10 @@ export async function handleAdmin(
   // and they cost nothing to keep.
   const plain = path.startsWith("/admin/plain");
   if (dashboard?.available && !plain && !path.startsWith("/admin/api")) {
-    if (path === "/admin" || /^\/admin\/(reports\/[\w-]+|people|changelog)$/.test(path)) {
+    if (
+      path === "/admin" ||
+      /^\/admin\/(reports\/[\w-]+|people|changelog(\/[\w-]+)?)$/.test(path)
+    ) {
       markReadFor(path);
       if (dashboard.shell(res)) return;
     }
@@ -274,6 +280,32 @@ export async function handleAdmin(
 
   if (path === "/admin/people" || path === "/admin/plain/people") {
     sendHtml(res, 200, peoplePage(listAdmins(), actor, oidc));
+    return;
+  }
+
+  // The drafts screen without the dashboard.
+  //
+  // Every other page here has a plain twin for when a build is broken, and this
+  // one needs it more than most: the gate is the only way a drafted note ever
+  // reaches the changelog page, so a broken bundle would mean notes piling up
+  // with no way to publish any of them. Safe, but stuck.
+  const plainDraft = path.match(/^\/admin\/plain\/changelog\/([\w-]+)$/);
+  if (plainDraft) {
+    const row = getChangelogDraft(plainDraft[1]);
+    if (!row) throw new HttpError(404, "not_found", "No such draft");
+    sendHtml(res, 200, draftPage(changelogEntry(row), actor));
+    return;
+  }
+
+  if (path === "/admin/plain/changelog") {
+    const wanted = url.searchParams.get("status") ?? undefined;
+    if (wanted !== undefined && !isChangelogStatus(wanted)) {
+      throw new HttpError(400, "invalid_status", "No such draft status");
+    }
+    const entries = listChangelogDrafts(wanted)
+      .map(changelogEntry)
+      .sort((a, b) => compareVersions(b.version, a.version));
+    sendHtml(res, 200, draftListPage(entries, wanted, actor));
     return;
   }
 
@@ -431,7 +463,9 @@ async function handlePost(
   // review lives. Rejecting keeps the text: a refusal nobody can read is a
   // refusal nobody can judge, and reading one is how the first fabricated
   // draft was diagnosed.
-  const draftDecision = path.match(/^\/admin\/api\/changelog\/([\w-]+)\/(publish|reject)$/);
+  const draftDecision = path.match(
+    /^\/admin(?:\/api|\/plain)?\/changelog\/([\w-]+)\/(publish|reject)$/,
+  );
   if (draftDecision) {
     const [, id, verb] = draftDecision;
     const raw = (await readBody(req, 4 * 1024)).toString("utf8");
@@ -450,6 +484,15 @@ async function handlePost(
     // Before the response, so a 200 means the page has it rather than that the
     // database does.
     const written = writePublicFile(config);
+
+    if (!path.startsWith("/admin/api/")) {
+      // Back to the list rather than to the note just decided. On a backfill
+      // this is a queue, and the next thing wanted is the next one waiting.
+      res.writeHead(303, { location: "/admin/plain/changelog" });
+      res.end();
+      return;
+    }
+
     sendJson(res, 200, { id: entry.id, status: entry.status, published: written });
     return;
   }
@@ -1069,6 +1112,157 @@ function peoplePage(people: AdminRow[], actor: Actor, oidc: OidcConfig | null): 
      <p class="muted">A username or email works before they have ever signed in.
      The first time they do, this pins to their user id, which is the one thing
      about an account nobody can change.</p>`,
+  );
+}
+
+/* ── Drafted release notes, without the dashboard ────────────────────────
+   Server-rendered, no client JavaScript, same as the plain report pages. The
+   whole page is prose a model wrote and commit messages out of the repository,
+   so everything goes through `esc` — the dashboard is React and escapes by
+   construction, and this is the copy that has to remember. */
+
+const DRAFT_SHELVES: { label: string; status?: ChangelogStatus }[] = [
+  { label: "Waiting", status: "draft" },
+  { label: "Published", status: "published" },
+  { label: "Rejected", status: "rejected" },
+  { label: "Everything" },
+];
+
+const DRAFT_STATUS_LABELS: Record<ChangelogStatus, string> = {
+  draft: "waiting",
+  published: "published",
+  rejected: "rejected",
+  superseded: "replaced",
+};
+
+/** `since 1.6.42 · 7 commits · qwen3:32b`, skipping whatever is missing. */
+function draftSource(entry: ChangelogEntry): string {
+  return [
+    entry.source?.since ? `since ${entry.source.since}` : "range unknown",
+    entry.source?.commits
+      ? `${entry.source.commits} commit${entry.source.commits === 1 ? "" : "s"}`
+      : null,
+    entry.source?.model,
+  ]
+    .filter(Boolean)
+    .map((part) => esc(part))
+    .join(" · ");
+}
+
+export function draftListPage(
+  entries: ChangelogEntry[],
+  shelf: ChangelogStatus | undefined,
+  actor: Actor,
+): string {
+  const shelves = DRAFT_SHELVES.map((view) => {
+    const href = view.status
+      ? `/admin/plain/changelog?status=${view.status}`
+      : "/admin/plain/changelog";
+    return shelf === view.status
+      ? `<strong>${esc(view.label)}</strong>`
+      : `<a href="${href}">${esc(view.label)}</a>`;
+  }).join(" · ");
+
+  const rows = entries.length
+    ? entries
+        .map(
+          (entry) => `<tr>
+            <td><a href="/admin/plain/changelog/${esc(entry.id)}">${esc(entry.version)}</a>
+              ${entry.channel === "beta" ? '<br /><span class="muted">beta</span>' : ""}</td>
+            <td>${esc(entry.headline)}<br /><span class="muted">${draftSource(entry)}</span></td>
+            <td class="muted">${esc(entry.date)}</td>
+            <td class="muted">${esc(DRAFT_STATUS_LABELS[entry.status])}</td>
+          </tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4" class="muted">Nothing here.</td></tr>';
+
+  const waiting = entries.filter((e) => e.status === "draft").length;
+
+  return page(
+    "Release notes",
+    `${whoami(actor)}
+     <p><a href="/admin/plain">← inbox</a></p>
+     <h1>Drafted, and not yet read</h1>
+     <p class="muted">A model drafted these from the commits in each release.
+     Nothing here is on the changelog page until you publish it.
+     ${waiting} waiting.</p>
+     <p class="muted">${shelves}</p>
+     <table>
+       <tr><th>Version</th><th>Headline</th><th>Date</th><th>Status</th></tr>
+       ${rows}
+     </table>`,
+  );
+}
+
+export function draftPage(entry: ChangelogEntry, actor: Actor): string {
+  const paragraphs = (lines: string[]): string =>
+    lines.map((line) => `<p>${esc(line)}</p>`).join("");
+
+  const sections = entry.sections
+    .map((section) => `<h2>${esc(section.heading)}</h2>${paragraphs(section.body)}`)
+    .join("");
+
+  const recap = entry.recap.length
+    ? `<h2>The short version</h2>${entry.recap
+        .map(
+          (group) =>
+            `<p><strong>${esc(group.group)}</strong></p><ul>${group.items
+              .map((item) => `<li>${esc(item)}</li>`)
+              .join("")}</ul>`,
+        )
+        .join("")}`
+    : "";
+
+  const total = entry.commits.reduce((n, group) => n + group.commits.length, 0);
+  const commits = entry.commits.length
+    ? entry.commits
+        .map(
+          (group) => `<p><strong>${esc(group.component)}</strong></p>${group.commits
+            .map(
+              (commit) =>
+                `<p>${esc(commit.subject)}${
+                  commit.body ? `<br /><span class="muted">${esc(commit.body)}</span>` : ""
+                }</p>`,
+            )
+            .join("")}`,
+        )
+        .join("")
+    : '<p class="muted">The range was not sent with this draft, so there is nothing here to check it against.</p>';
+
+  const decide =
+    entry.status === "draft"
+      ? `<h2>Decide</h2>
+         <form method="post" action="/admin/plain/changelog/${esc(entry.id)}/publish">
+           <button type="submit">Publish</button>
+         </form>
+         <form method="post" action="/admin/plain/changelog/${esc(entry.id)}/reject" class="decide">
+           <input type="text" name="note" maxlength="500" placeholder="why not" />
+           <button type="submit">Reject</button>
+         </form>`
+      : "";
+
+  return page(
+    `Gryt ${entry.version}`,
+    `${whoami(actor)}
+     <p><a href="/admin/plain/changelog">← release notes</a></p>
+     <h1>Gryt ${esc(entry.version)}</h1>
+     <p class="muted">${esc(entry.date)} · ${esc(DRAFT_STATUS_LABELS[entry.status])} · ${draftSource(entry)}
+     · drafted ${esc(entry.draftedAt.slice(0, 16).replace("T", " "))}${
+       entry.decidedAt
+         ? ` · by ${esc(entry.decidedBy ?? "somebody")} ${esc(
+             entry.decidedAt.slice(0, 16).replace("T", " "),
+           )}`
+         : ""
+     }</p>
+     ${entry.note ? `<p class="muted">${esc(entry.note)}</p>` : ""}
+     <p><strong>${esc(entry.headline)}</strong></p>
+     ${paragraphs(entry.intro)}
+     ${sections}
+     ${recap}
+     ${decide}
+     <h2>${total} ${total === 1 ? "commit" : "commits"} it was drafted from</h2>
+     ${commits}`,
   );
 }
 

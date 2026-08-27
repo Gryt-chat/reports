@@ -1033,11 +1033,19 @@ export function listChangelogDrafts(status?: ChangelogStatus): ChangelogRow[] {
   );
 }
 
-/** What the drafter uses to decide it has nothing to do for a version. */
+/**
+ * What the drafter uses to decide it has nothing to do for a version.
+ *
+ * The two live statuses and nothing else. A rejected version is deliberately
+ * absent: rejecting a draft is how you ask for another one, so the drafter has
+ * to see that version as undone. Superseded is absent for the same reason in
+ * reverse — a newer row for that version is already in the list.
+ */
 export function changelogVersions(): string[] {
+  const marks = LIVE_CHANGELOG_STATUSES.map(() => "?").join(",");
   return handle()
-    .prepare("SELECT DISTINCT version FROM changelog_drafts WHERE status != 'superseded'")
-    .all()
+    .prepare(`SELECT DISTINCT version FROM changelog_drafts WHERE status IN (${marks})`)
+    .all(...LIVE_CHANGELOG_STATUSES)
     .map((row) => String(row.version));
 }
 

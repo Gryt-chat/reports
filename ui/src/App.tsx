@@ -93,14 +93,10 @@ export function App() {
           </main>
         }
       />
-      <Route
-        path="/changelog"
-        element={
-          <main className="stage">
-            <Changelog />
-          </main>
-        }
-      />
+      {/* The drafts screen brings its own shell — it is a queue with a stage,
+          the same shape as the inbox, because a backfill puts 35 notes in it. */}
+      <Route path="/changelog" element={<Changelog />} />
+      <Route path="/changelog/:id" element={<Changelog />} />
       <Route
         path="/reports/:id"
         element={

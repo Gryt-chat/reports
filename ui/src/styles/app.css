@@ -327,21 +327,6 @@ a {
   padding: 0;
 }
 
-.note {
-  border: var(--rule);
-  border-radius: var(--radius-lg);
-  margin-top: var(--space-md);
-  padding: var(--space-lg);
-}
-
-.note__head {
-  align-items: flex-start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  justify-content: space-between;
-}
-
 .note__source {
   color: var(--color-ink-2);
   font-size: var(--text-xs);
@@ -357,13 +342,28 @@ a {
   padding-left: var(--space-sm);
 }
 
+/* The note and the commits it came from, side by side where there is room.
+   Beside rather than under, because checking a claim means looking at both at
+   once and a reader who has to scroll between them stops doing it. */
+.note__split {
+  border-top: var(--rule);
+  display: grid;
+  gap: var(--space-xl);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  margin-top: var(--space-md);
+  padding-top: var(--space-lg);
+}
+
+@media (max-width: 68rem) {
+  .note__split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* The note as the changelog page would set it: prose, one column, at a
    measure somebody can actually read a paragraph at. */
 .note__body {
-  border-top: var(--rule);
-  margin-top: var(--space-md);
   max-width: 40rem;
-  padding-top: var(--space-md);
 }
 
 .note__body p {
@@ -395,30 +395,29 @@ a {
   padding-left: var(--space-lg);
 }
 
-.note__commits {
-  border-top: var(--rule);
-  margin-top: var(--space-lg);
-  padding-top: var(--space-md);
-}
-
-.note__toggle {
-  background: none;
-  border: 0;
-  color: var(--color-ink-2);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-sm);
-  padding: 0;
-  text-decoration: underline;
-}
-
-/* What the note is checked against. Two columns where there is room, because
-   a claim and the commit it came from want to be readable side by side. */
+/* Sticky, so the commits stay on screen while the note scrolls past them.
+   The note is the long side of this pair and the range is what it is being
+   checked against. */
 .commits {
-  display: grid;
-  gap: var(--space-lg);
-  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
-  margin-top: var(--space-md);
+  align-self: start;
+  border-left: var(--rule);
+  max-height: calc(100dvh - var(--space-xl) * 2);
+  overflow-y: auto;
+  padding-left: var(--space-lg);
+  position: sticky;
+  top: var(--space-xl);
+}
+
+@media (max-width: 68rem) {
+  .commits {
+    border-left: 0;
+    border-top: var(--rule);
+    max-height: none;
+    overflow-y: visible;
+    padding-left: 0;
+    padding-top: var(--space-md);
+    position: static;
+  }
 }
 
 .commit {

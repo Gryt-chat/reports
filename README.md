@@ -327,15 +327,24 @@ encryption, in a release whose commit range does not contain the word keychain.
 It read like the rest of the note and it scored under the word-overlap guard the
 drafter runs.
 
-`/admin/changelog` shows what is waiting: the note as the page would set it, and
-the commit range it was drafted from, side by side. What caught the paraphrase
-was reading a claim and going to look for it, so the commits are on the page
-rather than a link away.
+`/admin/changelog` is a queue with a stage, the same shape as the inbox: the
+notes waiting on the left, the one you picked on the right, and the commit range
+it was drafted from beside the prose. What caught the paraphrase was reading a
+claim and going to look for it, so the commits are on the page rather than a link
+away. It is a queue rather than a list because there are 42 stable releases and
+three notes written by hand, so the first backfill puts about 35 here at once.
 
 **Publish** puts it on the changelog page. Seconds, and no rebuild, since the
-site fetches the file at runtime. **Reject** keeps the text and frees the version
-for another attempt. A refusal nobody can read is a refusal nobody can check, and
-reading one is how the first fabricated draft was diagnosed.
+site fetches the file at runtime. **Reject** keeps the text and frees the version,
+so the drafter has another go on its next tick — rejecting a draft is how you ask
+for a better one. A refusal nobody can read is a refusal nobody can check, and
+reading one is how the first fabricated draft was diagnosed. Either decision lands
+you on the next note still waiting.
+
+`/admin/plain/changelog` is the same thing server-rendered, for when the
+dashboard build is broken. The gate is the only route a drafted note has to the
+changelog page, so without a fallback a bad build would mean notes piling up with
+no way to publish any of them.
 
 | | |
 |---|---|
@@ -344,6 +353,10 @@ reading one is how the first fabricated draft was diagnosed.
 | `GET /admin/api/changelog` | Everything, or one `?status=`. |
 | `POST /admin/api/changelog/<id>/publish` | |
 | `POST /admin/api/changelog/<id>/reject` | Body `{ "note": "why not" }`. |
+
+The two decision routes also answer under `/admin/plain/changelog/<id>/…`, which
+is where the plain pages post their forms; those take a form-encoded body and
+redirect back to the list rather than answering JSON.
 
 Both `/v1` routes want `X-Gryt-Changelog-Key`, which is separate from the app
 keys: those ship inside a public binary, and this one writes to a page. Without

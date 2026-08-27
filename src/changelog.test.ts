@@ -135,6 +135,32 @@ test("a version the drafter has already had a go at is known, once", () => {
   assert.equal(versions.filter((v) => v === version).length, 1);
 });
 
+test("a rejected version is not known, so the drafter has another go", () => {
+  const version = "1.7.7";
+  const entry = receiveDraft(parseDraft(body({ version })), {
+    force: false,
+    now: new Date().toISOString(),
+  });
+  assert.equal(knownVersions().includes(version), true);
+
+  decide(entry.id, "rejected", null, "Sivert", new Date().toISOString());
+
+  /* Rejecting is how you ask for another draft, so the drafter has to stop
+     seeing this version as done. It skipped rejected versions for a while,
+     which made Reject mean "never again" without anything saying so. */
+  assert.equal(knownVersions().includes(version), false);
+});
+
+test("a published version stays known, so it is not drafted over", () => {
+  const version = "1.7.8";
+  const entry = receiveDraft(parseDraft(body({ version })), {
+    force: false,
+    now: new Date().toISOString(),
+  });
+  decide(entry.id, "published", null, "Sivert", new Date().toISOString());
+  assert.equal(knownVersions().includes(version), true);
+});
+
 test("publishing and rejecting record who and when", () => {
   const published = receiveDraft(parseDraft(body({ version: "1.7.3" })), {
     force: false,
