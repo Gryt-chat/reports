@@ -64,6 +64,18 @@ export interface ChangelogSource {
   since?: string;
   commits?: number;
   model?: string;
+  /**
+   * Which parts of Gryt moved, already in the words a reader should see.
+   *
+   * The drafter takes these off the manifest diff and maps them — "The app",
+   * "The server", "Voice", "Images" — rather than passing repository names
+   * through. It is the one thing the prose deliberately cannot say: the prompt
+   * forbids the model writing "SFU" or "server" at all, because a sentence that
+   * needs one is aimed at the wrong reader. So it goes beside the note instead
+   * of in it, which is also the only way to answer "do I need to update my
+   * server?" at a glance.
+   */
+  components?: string[];
 }
 
 /** One component's share of the range a note was drafted from. */
@@ -186,6 +198,15 @@ function parseSource(raw: unknown): ChangelogSource | null {
       ? Math.max(0, Math.floor(r.commits))
       : undefined,
     model: typeof r.model === "string" ? r.model.slice(0, 120) : undefined,
+    /* Capped and trimmed like everything else here. Gryt has four components
+       and this arrives from another process, so a list of two hundred is a bug
+       somewhere rather than a release nobody told us about. */
+    components: Array.isArray(r.components)
+      ? r.components
+          .filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+          .slice(0, 8)
+          .map((c) => c.trim().slice(0, 40))
+      : undefined,
   };
 }
 

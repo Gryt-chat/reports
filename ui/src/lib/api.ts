@@ -123,7 +123,13 @@ export interface ChangelogEntry {
   intro: string[];
   sections: ChangelogSection[];
   recap: ChangelogRecapGroup[];
-  source: { since?: string; commits?: number; model?: string } | null;
+  source: {
+    since?: string;
+    commits?: number;
+    model?: string;
+    /** Which parts of Gryt moved, already worded for a reader. */
+    components?: string[];
+  } | null;
   commits: ChangelogCommitGroup[];
   status: ChangelogStatus;
   draftedAt: string;
