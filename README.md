@@ -27,17 +27,17 @@ curl -X POST https://reports.gryt.chat/v1/reports \
 
 "Give feedback" and "Report a bug" used to open the issue tracker in a browser.
 That asks somebody to sign in to GitHub on a phone before they can tell us the
-app crashed. Most people won't, and the ones who would are not the ones we are
+app crashed. Most people won't, and the ones who would aren't the ones we're
 missing.
 
-So both rows open a form instead, and the form posts here. This service is not
-part of a Gryt server and a self-hoster never deploys it — it is Gryt the
+So both rows open a form instead, and the form posts here. This service isn't
+part of a Gryt server and a self-hoster never deploys it — it's Gryt the
 product's inbox, and it stays unexposed. Public feature requests, the ones
 people vote on, still live in Fider at
 [feedback.gryt.chat](https://feedback.gryt.chat).
 
 A bug and a piece of feedback are the same shape with a different label, so
-there is one endpoint and a `type` field rather than two of everything.
+there's one endpoint and a `type` field rather than two of everything.
 
 ## What a report carries
 
@@ -111,7 +111,7 @@ assemble them for the Version row on the preferences page, so the form should
 send that same object without asking.
 
 `app.id` is ignored if you send it. It comes from the header, so a report
-cannot claim to be from a different client than the key it authenticated with.
+can't claim to be from a different client than the key it authenticated with.
 
 The whole normalised report is stored as JSON next to the indexed columns, so a
 field an app starts sending before this service knows about it still lands in
@@ -121,7 +121,7 @@ field an app starts sending before this service knows about it still lands in
 
 `GET /healthz` answers `{"ok": true}` and nothing else. The service name, the
 version and the uptime are on `/admin/api/stats`, behind sign-in: together they
-say which release is running and therefore which fixes are not in it, which is
+say which release is running and therefore which fixes aren't in it, which is
 the first thing worth writing down about a host and the last thing worth
 handing out.
 
@@ -129,8 +129,8 @@ handing out.
 |---|---|
 | `202` | Stored. Body is `{ id, receivedAt }`. |
 | `400` | `invalid_json`, `invalid_body`, `invalid_type`, `empty_message`. |
-| `401` | `missing_app`, `bad_app_key`, `bad_signature`, `replayed_assertion`, `signature_required`. A wrong key and an app nobody configured answer the same, so the difference cannot be used to learn which apps exist. |
-| `403` | `origin_not_allowed`. Does not say which origin was expected. |
+| `401` | `missing_app`, `bad_app_key`, `bad_signature`, `replayed_assertion`, `signature_required`. A wrong key and an app nobody configured answer the same, so the difference can't be used to learn which apps exist. |
+| `403` | `origin_not_allowed`. Doesn't say which origin was expected. |
 | `413` | `body_too_large`. |
 | `429` | `rate_limited`, with `Retry-After`. |
 
@@ -140,28 +140,27 @@ below.
 
 ## Keeping the junk out
 
-**The app key is off, and that is a decision rather than an omission.** The
+**The app key is off, and that's a decision rather than an omission.** The
 service still takes an `X-Gryt-App-Key`, one key per app, and on a deployment
-that configures `REPORTS_APP_KEYS` it is required. The deployment behind
-`reports.gryt.chat` does not, because a key that ships inside a public app is
-not a secret — anyone can pull it out of a bundle or read one request in a
-proxy — and the day it has to be rotated is the day everybody who has not
-updated their app stops being able to report a bug. That is the failure this
-service exists to avoid, traded for friction that stops a scanner and nobody
-else.
+that configures `REPORTS_APP_KEYS` it's required. The deployment behind
+`reports.gryt.chat` doesn't. A key that ships inside a public app isn't a
+secret — anyone can pull it out of a bundle or read one request in a proxy. And
+the day it has to be rotated is the day everybody who hasn't updated their app
+stops being able to report a bug. That's the failure this service exists to
+avoid, traded for friction that stops a scanner and nobody else.
 
 What holds the line instead: a minimum gap between requests, counters per
 address and per install, a ban list, and a triage pass that bans whoever keeps
 sending junk.
 
-**The signature is what actually authenticates, and it is optional until every
+**The signature is what actually authenticates, and it's optional until every
 client sends one.** Every Gryt client already holds an identity keypair, and
 joining a server is a signed challenge-response over P-256. A report signed with
 that same key is verifiable, ties repeat submissions together without collecting
 anything about the person, and makes banning an abuser possible rather than
 banning whatever IP they were on.
 
-There is no challenge round trip here, so replay is prevented three other ways:
+There's no challenge round trip here, so replay is prevented three other ways:
 the assertion is bound to the exact request body through `bh`, it expires in
 five minutes, and its `jti` is good exactly once.
 
@@ -182,13 +181,13 @@ from anyway. Set `REPORTS_REQUIRE_SIGNATURE=true` once every client signs.
 
 **Where the request came from.** A browser sends an `Origin` and it has to be
 on `REPORTS_CORS_ORIGINS` or the report is refused. Native clients send none —
-React Native does not, and neither does Electron's main process — so this is not
+React Native doesn't, and neither does Electron's main process — so this isn't
 a check every client has to pass. It exists for one case: a page on the open web
 making somebody's browser file reports. CORS already stops that page reading the
 answer; without this the report lands in the table anyway.
 
 **Rate limits** start with `REPORTS_MIN_INTERVAL_SEC`, the shortest gap between
-one client's reports. It is the cheapest check here and the one that does the
+one client's reports. It's the cheapest check here and the one that does the
 most: a script posting in a loop is stopped by its second request, before any
 hourly counter has noticed. It answers honestly, with the real wait in
 `Retry-After`, because somebody filing a second genuine report ten seconds after
@@ -196,10 +195,10 @@ the first is the ordinary case and should be told to wait rather than have it
 vanish.
 
 The rest are counted per IP, per install id and per identity key, in SQLite
-rather than in memory, so restarting the service is not a way to clear your
-limit. The address they are counted against comes from a header when
+rather than in memory, so restarting the service isn't a way to clear your
+limit. The address they're counted against comes from a header when
 `REPORTS_TRUST_PROXY` is on, so `REPORTS_TRUSTED_PROXIES` decides whose header
-to believe — without it, anything that can reach the port directly can name its
+to believe. Without it, anything that can reach the port directly can name its
 own address and skip both the limits and the bans.
 
 **Bans** come in four kinds: `ip`, `install`, `subject` and `app`. The last one
@@ -212,18 +211,18 @@ of information that makes a ban worth working around: it names the identifier to
 change and it says so after every attempt, which is a free oracle for finding
 one that still works. The attempt is counted against the ban, so
 `GET /admin/api/bans` can say how many each has swallowed in the last day —
-without that the ban is silent in both directions, and you cannot tell a ban
-that is still working from one that is just sitting there.
+without that the ban is silent in both directions, and you can't tell a ban
+that's still working from one that's just sitting there.
 
 **Triage bans whoever keeps sending junk.** `REPORTS_AUTO_BAN_NOISE` reports the
 model called `noise` within `REPORTS_AUTO_BAN_WINDOW_H` earns a ban lasting
-`REPORTS_AUTO_BAN_DAYS`, on the identity thumbprint where there is one and the
+`REPORTS_AUTO_BAN_DAYS`, on the identity thumbprint where there's one and the
 address otherwise. **Only `noise` counts** — empty submissions, test posts, spam,
-nothing to do with Gryt. `not_a_bug` deliberately does not: that verdict means a
+nothing to do with Gryt. `not_a_bug` deliberately doesn't: that verdict means a
 feature request or a support question, and somebody who sends three of those is
 the most engaged person using Gryt rather than an abuser. The ban expires, and
 its reason names the reports behind it so it can be checked and lifted from the
-inbox rather than taken on trust — it is the one place here where a model's
+inbox rather than taken on trust — it's the one place here where a model's
 answer takes an action rather than sorting a queue.
 
 ## Triage
@@ -234,7 +233,7 @@ things is configured.
 **On the machine**, through Ollama: set `REPORTS_OLLAMA_URL`. The schema below
 goes across as Ollama's `format`, so the runtime constrains what the model may
 emit rather than the prompt asking it nicely — which is most of why a small
-local model is enough here. It does not have to be good at producing JSON, only
+local model is enough here. It doesn't have to be good at producing JSON, only
 at deciding what the report is. `qwen3:8b` is the default and shares a 12GB card
 comfortably; `qwen3:14b` judges better and leaves much less room for anything
 else on the GPU.
@@ -254,15 +253,15 @@ probably belongs to, and whether it repeats something already in the inbox.
 It sorts and never deletes. Nothing is dropped, nothing is auto-closed, and the
 verdict only decides what to read first — a wrongly binned report is one nobody
 ever sees again, which is a worse outcome than a long queue. A report the pass
-cannot classify, including one a safety classifier declines, stays in the inbox
+can't classify, including one a safety classifier declines, stays in the inbox
 unsorted.
 
 The report text goes to the model as data to classify, and the model is told as
-much, since it is whatever a stranger typed.
+much, since it's whatever a stranger typed.
 
 ## Filing a report as a task
 
-Reading a report and deciding it is real is one step. Writing it up is another,
+Reading a report and deciding it's real is one step. Writing it up is another,
 and the second is where reports stop.
 
 **Create task** asks the model that already triaged the report to draft one —
@@ -272,12 +271,12 @@ person's description of a fault will sometimes read it the wrong way round, and
 a draft nobody can correct is one that gets filed wrong or thrown away.
 
 Filing does three things: creates the task, records its id on the report so the
-same report cannot be filed twice, and resolves the report. The description
+same report can't be filed twice, and resolves the report. The description
 carries the report id and a link back to it, so a task can be traced to what
 prompted it rather than rewritten from scratch six weeks later.
 
 `REPORTS_VIKUNJA_TOKEN` is a write credential for the board. Without it the
-button is not offered at all.
+button isn't offered at all.
 ## The weekly digest
 
 Nothing else tells anybody a report arrived. The inbox is a page somebody has
@@ -301,7 +300,7 @@ to it can be looked at without waiting for a Monday. `?live=1` for the real
 week. `POST /admin/api/digest/send` sends now.
 
 SMTP is the `GRYT_SMTP_*` set the rest of Gryt uses. Without a host the digest
-does not run and the service starts as normal.
+doesn't run and the service starts as normal.
 
 The mail is built from `@gryt/ui`'s own tokens and component geometry — Surface
 at radius 20 with a 1px border, Button as a pill, the shipped palette — written
@@ -310,7 +309,7 @@ properties. That list is what to check when the library moves.
 
 ## Reading a drafted release note
 
-A drafted release note is not a report. It is here because the inbox is already
+A drafted release note isn't a report. It's here because the inbox is already
 where things wait for Sivert to decide about them, and already behind a Keycloak
 sign-in.
 
@@ -323,7 +322,7 @@ a note nobody had read was public the moment the model finished writing it.
 Two fabricated drafts were caught by reading them while that was being built.
 One retold a different release wholesale. The other was a paraphrase: a section
 headed "Security improvements for identity and account tokens", about keychain
-encryption, in a release whose commit range does not contain the word keychain.
+encryption, in a release whose commit range doesn't contain the word keychain.
 It read like the rest of the note and it scored under the word-overlap guard the
 drafter runs.
 
@@ -331,7 +330,7 @@ drafter runs.
 notes waiting on the left, the one you picked on the right, and the commit range
 it was drafted from beside the prose. What caught the paraphrase was reading a
 claim and going to look for it, so the commits are on the page rather than a link
-away. It is a queue rather than a list because there are 42 stable releases and
+away. It's a queue rather than a list because there are 42 stable releases and
 three notes written by hand, so the first backfill puts about 35 here at once.
 
 **Publish** puts it on the changelog page. Seconds, and no rebuild, since the
@@ -349,7 +348,7 @@ no way to publish any of them.
 | | |
 |---|---|
 | `POST /v1/changelog` | Take a draft. `?force=1` replaces the one a version already has. |
-| `GET /v1/changelog/versions` | What the drafter already had a go at, so it does not spend a model on it twice. |
+| `GET /v1/changelog/versions` | What the drafter already had a go at, so it doesn't spend a model on it twice. |
 | `GET /admin/api/changelog` | Everything, or one `?status=`. |
 | `POST /admin/api/changelog/<id>/publish` | |
 | `POST /admin/api/changelog/<id>/reject` | Body `{ "note": "why not" }`. |
@@ -360,23 +359,23 @@ redirect back to the list rather than answering JSON.
 
 Both `/v1` routes want `X-Gryt-Changelog-Key`, which is separate from the app
 keys: those ship inside a public binary, and this one writes to a page. Without
-`REPORTS_CHANGELOG_KEY` the routes are not there at all.
+`REPORTS_CHANGELOG_KEY` the routes aren't there at all.
 
 `REPORTS_CHANGELOG_FILE` is where `changelog.json` is written: the path nginx
 serves beside the site, bind-mounted into both containers. Drafts are in that
-file carrying `status: "draft"`, because an unpublished note is not a secret. The
+file carrying `status: "draft"`, because an unpublished note isn't a secret. The
 changelog page renders published entries and shows the rest only under
 `?drafts=1`, which is how a note gets read on the page it would go on. The commit
 range is never in it.
 
 Set no file and nothing is published anywhere, while the inbox still takes and
-shows drafts. That is the right behaviour for any deployment of this service
+shows drafts. That's the right behaviour for any deployment of this service
 other than the one behind gryt.chat.
 
 ## Statuses
 
 Triage says what a report looks like. The status says what you decided about it,
-and they are separate on purpose — the model's opinion should never be the
+and they're separate on purpose — the model's opinion should never be the
 record of what happened.
 
 | Status | |
@@ -402,7 +401,7 @@ This used to be a second listener on a second port with a hostname of its own,
 so that the public one could answer `404` for `/admin` and not admit an inbox
 existed. What that bought was one scan's worth of guessing; what it cost was two
 of everything — two routes, two ports, two places for a header or a cache rule
-to be right in one and wrong in the other. It is how the dashboard bundle ended
+to be right in one and wrong in the other. It's how the dashboard bundle ended
 up cached at the edge from before it was gated. One door, and sign-in is what
 holds it.
 
@@ -410,20 +409,20 @@ holds it.
 list inside this service says whether they may read the inbox. A Gryt account is
 not enough on its own, because anybody can make one.
 
-That list is here rather than in the realm on purpose: it is two or three
+That list is here rather than in the realm on purpose: it's two or three
 people, and adding somebody's partner to it should be a form field, not a trip
 through the Keycloak admin console. Add them by user id, username or email — the
 last two work before they have ever signed in, and the entry pins itself to
 their user id the first time they do, which is the one thing about an account
-they cannot change afterwards. Removing somebody takes effect on their next
+they can't change afterwards. Removing somebody takes effect on their next
 request, not when their session happens to expire, and the last person on the
-list cannot be removed.
+list can't be removed.
 
 `REPORTS_BOOTSTRAP_ADMIN` names whoever gets in first, and applies only while
 the list is empty.
 
 With no OIDC configured, the admin token guards the inbox instead: open
-`/admin?token=…` once and it is swapped for a `SameSite=Strict` cookie so it
+`/admin?token=…` once and it's swapped for a `SameSite=Strict` cookie so it
 stops turning up in history and referrers.
 
 **Signing out goes through the realm.** Clearing this service's own cookie is
@@ -431,7 +430,7 @@ not signing out: Keycloak still holds an SSO session, so the next request to
 `/admin/login` comes back with a fresh code and no prompt. `/admin/logout`
 clears both cookies and hands you to the realm's `end_session_endpoint`, which
 sends you back to the sign-in page. On a deployment with only the token, it
-clears the cookies and there is nowhere to send you.
+clears the cookies and there's nowhere to send you.
 
 **The token stays for scripts.** `Authorization: Bearer $REPORTS_ADMIN_TOKEN`
 works whether or not sign-in is configured. A person gets a session, a script
@@ -458,12 +457,12 @@ POST /admin/api/people/<id>/delete
 `shelf` is `open` (the default), `closed` or `all`; a named `status` overrides
 it. `triage` filters on whether the pass has run, `status` on what you decided.
 A listing leaves out the `payload` — the diagnostics blob is most of a report's
-bytes, and it is there on the single-report route when it is wanted. That keeps
+bytes, and it's there on the single-report route when it's wanted. That keeps
 the queue cheap to read for a person and for anything else going through it.
 
 Set `REPORTS_DISCORD_WEBHOOK_URL` and each report is posted to Discord as it
 arrives (`REPORTS_NOTIFY_ON=receive`) or once triage has looked at it (`triage`,
-the default), so reading the inbox does not depend on remembering it is there.
+the default), so reading the inbox doesn't depend on remembering it's there.
 
 ## Running it
 
@@ -489,7 +488,7 @@ before deploying:
 | `REPORTS_TRUSTED_PROXIES` | — | And believe it only from these addresses. Empty believes any peer, which is only right when nothing but the proxy can reach the port. |
 | `REPORTS_CORS_ORIGINS` | — | Browser origins allowed to POST. The web client needs listing. |
 | `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
-| `REPORTS_CHANGELOG_KEY` | — | Lets the changelog drafter post. Without it those routes do not exist. |
+| `REPORTS_CHANGELOG_KEY` | — | Lets the changelog drafter post. Without it those routes don't exist. |
 | `REPORTS_CHANGELOG_FILE` | — | Where `changelog.json` is written for the site to fetch. |
 
 ```sh
