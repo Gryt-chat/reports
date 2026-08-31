@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 
 import type { Config } from "./config.ts";
 import {
+  changelogRejectionNotes,
   changelogVersions,
   decideChangelog,
   getChangelogDraft,
@@ -363,6 +364,31 @@ export function decide(
 /** Versions the drafter should not spend a model on again. */
 export function knownVersions(): string[] {
   return changelogVersions().sort(compareVersions);
+}
+
+/**
+ * Why the last refused draft for each version was refused.
+ *
+ * The drafter asks for this before it writes, and puts what it gets in front
+ * of the model. Rejecting a draft has always meant "write it again"; this is
+ * what makes it mean "write it again, and here is what was wrong".
+ *
+ * Newest per version, decided here rather than in the query. An older
+ * rejection describes a draft that no longer exists, and handing two back
+ * would have the model answering two reviews of two different notes. A row
+ * with no `decidedAt` loses to one that has it, and loses to nothing else.
+ *
+ * A version never refused, or refused without a reason typed in, is absent.
+ */
+export function rejectionNotes(): Record<string, string> {
+  const newest = new Map<string, { note: string; decidedAt: string }>();
+  for (const { version, note, decidedAt } of changelogRejectionNotes()) {
+    const seen = newest.get(version);
+    if (!seen || (decidedAt ?? "") > seen.decidedAt) {
+      newest.set(version, { note, decidedAt: decidedAt ?? "" });
+    }
+  }
+  return Object.fromEntries([...newest].map(([version, { note }]) => [version, note]));
 }
 
 /**

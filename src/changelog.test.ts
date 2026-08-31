@@ -11,6 +11,7 @@ import {
   parseDraft,
   publicDocument,
   receiveDraft,
+  rejectionNotes,
   writePublicFile,
 } from "./changelog.ts";
 import type { Config } from "./config.ts";
@@ -258,4 +259,61 @@ test("the file is written where it was asked for, and not at all without a path"
 test("versions sort by number, not by string or by date", () => {
   const sorted = ["1.6.10", "1.6.9", "1.10.0", "1.6.43"].sort(compareVersions);
   assert.deepEqual(sorted, ["1.6.9", "1.6.10", "1.6.43", "1.10.0"]);
+});
+
+test("a rejected version carries its reason back to the drafter", () => {
+  const version = "1.7.20";
+  const entry = receiveDraft(parseDraft(body({ version })), {
+    force: false,
+    now: new Date().toISOString(),
+  });
+  decide(entry.id, "rejected", "The recap files a proxy fix under Updates.", "Sivert", new Date().toISOString());
+
+  /* Rejecting has always meant "write it again". Until this, it did not mean
+     "and here is what was wrong" — the reason sat in the table and reached
+     nobody, so the same fault came back in the next draft. */
+  assert.equal(rejectionNotes()[version], "The recap files a proxy fix under Updates.");
+});
+
+test("a rejection with nothing typed in it says nothing", () => {
+  const version = "1.7.21";
+  const entry = receiveDraft(parseDraft(body({ version })), {
+    force: false,
+    now: new Date().toISOString(),
+  });
+  decide(entry.id, "rejected", null, "Sivert", new Date().toISOString());
+
+  assert.equal(version in rejectionNotes(), false);
+});
+
+test("only the newest rejection for a version comes back", () => {
+  const version = "1.7.22";
+
+  /* Refused in the opposite order to the one the drafts were written in, so
+     that row order and recency disagree. That is the whole point of the test:
+     with both pointing the same way it passed against a query with no
+     newest-only logic at all, because SQLite handed the later row back last
+     and it simply overwrote the earlier one. */
+  const first = receiveDraft(parseDraft(body({ version })), {
+    force: false,
+    now: new Date().toISOString(),
+  });
+  decide(first.id, "rejected", "Newer reason.", "Sivert", "2026-08-31T10:00:00.000Z");
+
+  const second = receiveDraft(parseDraft(body({ version })), {
+    force: false,
+    now: new Date().toISOString(),
+  });
+  decide(second.id, "rejected", "Older reason.", "Sivert", "2026-08-30T10:00:00.000Z");
+
+  /* An older rejection describes a draft that no longer exists. Handing both
+     back would have the model answering two reviews of two different notes. */
+  assert.equal(rejectionNotes()[version], "Newer reason.");
+});
+
+test("a version that was never refused has no reason to carry", () => {
+  const version = "1.7.23";
+  receiveDraft(parseDraft(body({ version })), { force: false, now: new Date().toISOString() });
+
+  assert.equal(version in rejectionNotes(), false);
 });

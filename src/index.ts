@@ -9,6 +9,7 @@ import {
   MAX_CHANGELOG_BODY,
   parseDraft,
   receiveDraft,
+  rejectionNotes,
   writePublicFile,
 } from "./changelog.ts";
 import { Dashboard } from "./dashboard.ts";
@@ -179,6 +180,12 @@ async function changelog(
   // What the drafter asks before it spends eight minutes of GPU on a release.
   if (url.pathname === "/v1/changelog/versions" && req.method === "GET") {
     sendJson(res, 200, { versions: knownVersions() });
+    return;
+  }
+
+  // And what it asks before writing one it has been asked to write again.
+  if (url.pathname === "/v1/changelog/feedback" && req.method === "GET") {
+    sendJson(res, 200, { feedback: rejectionNotes() });
     return;
   }
 
