@@ -1049,6 +1049,36 @@ export function changelogVersions(): string[] {
     .map((row) => String(row.version));
 }
 
+/**
+ * Every refused draft that somebody typed a reason on.
+ *
+ * Rejecting a draft is how you ask for another one, and until now the asking
+ * carried no words: the note went into this table, was rendered in the admin
+ * page, and reached nobody else. The drafter redrew the same range from
+ * scratch and made the same mistake — 1.6.41 was refused for the recap group
+ * it had used and came back with that group unchanged.
+ *
+ * All of them, not the newest per version: picking one is `rejectionNotes` in
+ * `changelog.ts`, in JavaScript where it can be tested. Doing it here in SQL
+ * looked tidier and could not be broken by a test — SQLite hands rows back in
+ * insertion order, which happens to be the right answer, so the clause that
+ * was supposed to guarantee it never did any work.
+ */
+export function changelogRejectionNotes(): {
+  version: string;
+  note: string;
+  decidedAt: string | null;
+}[] {
+  return rowsAs<{ version: string; note: string; decided_at: string | null }>(
+    handle()
+      .prepare(
+        `SELECT version, note, decided_at FROM changelog_drafts
+          WHERE status = 'rejected' AND note IS NOT NULL AND TRIM(note) <> ''`,
+      )
+      .all(),
+  ).map((row) => ({ version: row.version, note: row.note, decidedAt: row.decided_at }));
+}
+
 /** The draft or published note for a version, if there is one. */
 export function liveChangelogFor(version: string): ChangelogRow | null {
   const marks = LIVE_CHANGELOG_STATUSES.map(() => "?").join(",");
