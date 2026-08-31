@@ -317,3 +317,34 @@ test("a version that was never refused has no reason to carry", () => {
 
   assert.equal(version in rejectionNotes(), false);
 });
+
+test("a draft says which drafter wrote it", () => {
+  /* Asserted on the parsed draft, not on the row getChangelogDraft returns:
+     that row carries `source` as the JSON string it is stored as, so
+     `row.source?.revision` is undefined whatever the value is, and a test
+     written against it passes for every input including none. */
+  const draft = parseDraft(
+    body({ source: { since: "1.7.29", commits: 3, model: "qwen3:30b-a3b", revision: "2e1e78e" } }),
+  );
+
+  /* The drafter's checkout is updated by a pull that is allowed to fail, so a
+     run can quietly produce a note against rules that are no longer the rules.
+     Three times so far. The commit goes on the draft so the question is
+     answerable from the review page instead of from the journal. */
+  assert.equal(draft.source?.revision, "2e1e78e");
+});
+
+test("a drafter that could not say which commit it is on still posts", () => {
+  const draft = parseDraft(body({ source: { since: "1.7.30", commits: 1, model: "qwen3:30b-a3b" } }));
+
+  /* Absent rather than empty. A drafter running from a tarball with no git has
+     nothing to report, and that is not a reason to refuse its note. */
+  assert.equal(draft.source?.revision, undefined);
+  assert.equal(draft.source?.model, "qwen3:30b-a3b");
+});
+
+test("a revision too long to be a commit is cut, not refused", () => {
+  const draft = parseDraft(body({ source: { since: "1.7.31", commits: 1, revision: "x".repeat(200) } }));
+
+  assert.equal(draft.source?.revision?.length, 60);
+});
