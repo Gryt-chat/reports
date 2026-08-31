@@ -1143,6 +1143,9 @@ function draftSource(entry: ChangelogEntry): string {
       ? `${entry.source.commits} commit${entry.source.commits === 1 ? "" : "s"}`
       : null,
     entry.source?.model,
+    /* Last, because it is the one part nobody needs until something is wrong,
+       and then it is the first thing worth knowing. */
+    entry.source?.revision ? `drafter ${entry.source.revision}` : null,
   ]
     .filter(Boolean)
     .map((part) => esc(part))

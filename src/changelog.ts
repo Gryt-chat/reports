@@ -66,6 +66,22 @@ export interface ChangelogSource {
   commits?: number;
   model?: string;
   /**
+   * The commit of the drafter that wrote this note.
+   *
+   * The drafter runs from a checkout on the box, updated by a pull that is
+   * allowed to fail: a network blip should not cost a release its note, so a
+   * refused pull logs one line and the run carries on against whatever is
+   * already there. The cost is that a checkout which quietly stops updating
+   * produces drafts judged by rules that are no longer the rules, and nothing
+   * about the draft says so.
+   *
+   * That has happened three times — a read-only filesystem, DNS, and a local
+   * edit the pull refused to stand on — and once it took an afternoon and a
+   * wrong hypothesis to work out why six drafts broke rules that were on main
+   * at the time. With this, the answer is on the row.
+   */
+  revision?: string;
+  /**
    * Which parts of Gryt moved, already in the words a reader should see.
    *
    * The drafter takes these off the manifest diff and maps them — "The app",
@@ -199,6 +215,13 @@ function parseSource(raw: unknown): ChangelogSource | null {
       ? Math.max(0, Math.floor(r.commits))
       : undefined,
     model: typeof r.model === "string" ? r.model.slice(0, 120) : undefined,
+    /* A short commit sha, or whatever the drafter could work out. Capped
+       rather than validated as hex: it is a label on a review page, not
+       something anything looks up, and a drafter running from a tarball with
+       no git at all should still be able to say so. */
+    revision: typeof r.revision === "string" && r.revision.trim()
+      ? r.revision.trim().slice(0, 60)
+      : undefined,
     /* Capped and trimmed like everything else here. Gryt has four components
        and this arrives from another process, so a list of two hundred is a bug
        somewhere rather than a release nobody told us about. */
