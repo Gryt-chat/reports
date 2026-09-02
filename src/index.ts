@@ -8,6 +8,7 @@ import {
   knownVersions,
   MAX_CHANGELOG_BODY,
   parseDraft,
+  publicDocument,
   receiveDraft,
   rejectionNotes,
   writePublicFile,
@@ -136,6 +137,16 @@ async function handle(
     return;
   }
 
+  // Ahead of the gated routes below, and deliberately its own branch rather
+  // than an early return inside changelog(). That function checks the key
+  // before it looks at a path, which is the property worth keeping; a public
+  // route added inside it would sit above that check and the next person to
+  // add one would follow the example.
+  if (url.pathname === "/v1/changelog/notes" && req.method === "GET") {
+    notes(res);
+    return;
+  }
+
   if (url.pathname.startsWith("/v1/changelog")) {
     await changelog(req, res, url, config);
     return;
@@ -147,6 +158,38 @@ async function handle(
   }
 
   throw new HttpError(404, "not_found", "No such endpoint");
+}
+
+/**
+ * The release notes, for the changelog page to render.
+ *
+ * The same bytes `writePublicFile` puts on disk, from the same function, served
+ * over HTTP instead. Both exist because the two halves of gryt.chat are on
+ * different machines: this service runs on the box with the database, and the
+ * site is a container on the Raspberry Pi with no mount to write into. The file
+ * is still written for a deployment where the two are on one host, and it is
+ * still what `REPORTS_CHANGELOG_FILE` means.
+ *
+ * Unauthenticated on purpose, and it gives away nothing the file did not. That
+ * file is served by nginx from a public path, so this document has always been
+ * readable by anybody who asked for it — drafts included, which is deliberate
+ * and documented on `publishableChangelog`: an unpublished note is unread rather
+ * than secret, and the changelog page hides one unless the URL says `?drafts=1`.
+ *
+ * Not in the CORS allow-list, because it does not need to be. The site's nginx
+ * proxies its own `/release-notes/changelog.json` here, so the browser only ever
+ * sees one origin. Adding an origin here would be adding a way to reach this
+ * that nothing uses.
+ *
+ * `no-store` rather than a short max-age. Cloudflare fronts both hostnames and
+ * its dashboard Browser Cache TTL overrides what an origin asks for, so a
+ * max-age here is a suggestion rather than a number. The point of the review
+ * gate is that pressing Publish is visible in seconds, and this document is 9 KB.
+ */
+function notes(res: ServerResponse): void {
+  sendJson(res, 200, publicDocument(new Date().toISOString()), {
+    "cache-control": "no-store",
+  });
 }
 
 /**
