@@ -1,18 +1,9 @@
 import consola from "consola";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 
 import { handleAdmin } from "./admin.ts";
 import { checkAppKey, verifyIdentity } from "./auth.ts";
-import {
-  knownVersions,
-  MAX_CHANGELOG_BODY,
-  parseDraft,
-  publicDocument,
-  receiveDraft,
-  rejectionNotes,
-  writePublicFile,
-} from "./changelog.ts";
 import { Dashboard } from "./dashboard.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { closeDb, getReport, initDb, insertReport } from "./db.ts";
@@ -53,12 +44,6 @@ async function main(): Promise<void> {
 
   const oidc = oidcFrom(config);
   const dashboard = new Dashboard(config.uiDir);
-
-  // Once at boot, so a container on a fresh volume serves a real file rather
-  // than a 404 the changelog page has to treat as "no notes yet".
-  if (config.changelog.file && writePublicFile(config)) {
-    consola.info(`[reports] release notes written to ${config.changelog.file}`);
-  }
 
   const server = http.createServer((req, res) => {
     void handle(req, res, config, triager, oidc, dashboard, digest).catch((err) => {
@@ -137,139 +122,12 @@ async function handle(
     return;
   }
 
-  // Ahead of the gated routes below, and deliberately its own branch rather
-  // than an early return inside changelog(). That function checks the key
-  // before it looks at a path, which is the property worth keeping; a public
-  // route added inside it would sit above that check and the next person to
-  // add one would follow the example.
-  if (url.pathname === "/v1/changelog/notes" && req.method === "GET") {
-    notes(res);
-    return;
-  }
-
-  if (url.pathname.startsWith("/v1/changelog")) {
-    await changelog(req, res, url, config);
-    return;
-  }
-
   if (url.pathname.startsWith("/admin")) {
     await handleAdmin(req, res, url, config, oidc, dashboard, triager.model, digest);
     return;
   }
 
   throw new HttpError(404, "not_found", "No such endpoint");
-}
-
-/**
- * The release notes, for the changelog page to render.
- *
- * The same bytes `writePublicFile` puts on disk, from the same function, served
- * over HTTP instead. Both exist because the two halves of gryt.chat are on
- * different machines: this service runs on the box with the database, and the
- * site is a container on the Raspberry Pi with no mount to write into. The file
- * is still written for a deployment where the two are on one host, and it is
- * still what `REPORTS_CHANGELOG_FILE` means.
- *
- * Unauthenticated on purpose, and it gives away nothing the file did not. That
- * file is served by nginx from a public path, so this document has always been
- * readable by anybody who asked for it — drafts included, which is deliberate
- * and documented on `publishableChangelog`: an unpublished note is unread rather
- * than secret, and the changelog page hides one unless the URL says `?drafts=1`.
- *
- * Not in the CORS allow-list, because it does not need to be. The site's nginx
- * proxies its own `/release-notes/changelog.json` here, so the browser only ever
- * sees one origin. Adding an origin here would be adding a way to reach this
- * that nothing uses.
- *
- * `no-store` rather than a short max-age. Cloudflare fronts both hostnames and
- * its dashboard Browser Cache TTL overrides what an origin asks for, so a
- * max-age here is a suggestion rather than a number. The point of the review
- * gate is that pressing Publish is visible in seconds, and this document is 9 KB.
- */
-function notes(res: ServerResponse): void {
-  sendJson(res, 200, publicDocument(new Date().toISOString()), {
-    "cache-control": "no-store",
-  });
-}
-
-/**
- * Take a drafted release note, or say which versions already have one.
- *
- * Not part of the report endpoint and not behind an app key: the drafter is a
- * script on the same machine, not one of the apps, and the two should not share
- * a credential — an app key is shipped inside a public binary, and this one
- * writes to a page.
- *
- * Deliberately absent from the CORS allow-list. Nothing in a browser has any
- * business posting a release note, so a page that tries is stopped before the
- * key is even considered.
- */
-async function changelog(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-  config: Config,
-): Promise<void> {
-  const expected = config.changelog.key;
-  if (!expected) {
-    throw new HttpError(404, "not_found", "Nothing configured to guard drafted notes");
-  }
-
-  const given = header(req, "x-gryt-changelog-key");
-  if (!given || !keyMatches(given, expected)) {
-    throw new HttpError(401, "unauthorised", "X-Gryt-Changelog-Key is wrong or missing");
-  }
-
-  // What the drafter asks before it spends eight minutes of GPU on a release.
-  if (url.pathname === "/v1/changelog/versions" && req.method === "GET") {
-    sendJson(res, 200, { versions: knownVersions() });
-    return;
-  }
-
-  // And what it asks before writing one it has been asked to write again.
-  if (url.pathname === "/v1/changelog/feedback" && req.method === "GET") {
-    sendJson(res, 200, { feedback: rejectionNotes() });
-    return;
-  }
-
-  if (url.pathname !== "/v1/changelog" || req.method !== "POST") {
-    throw new HttpError(404, "not_found", "No such endpoint");
-  }
-
-  const raw = (await readBody(req, MAX_CHANGELOG_BODY)).toString("utf8");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw || "null");
-  } catch {
-    throw new HttpError(400, "invalid_json", "Body is not valid JSON");
-  }
-
-  const draft = parseDraft(parsed);
-  const result = receiveDraft(draft, {
-    force: url.searchParams.get("force") === "1",
-    now: new Date().toISOString(),
-  });
-
-  if (result.created) {
-    consola.info(`[changelog] ${draft.version} drafted, waiting to be read`);
-    // So it is readable at /changelog?drafts=1 straight away, which is where
-    // a note is easiest to judge — rendered, on the page it would go on.
-    writePublicFile(config);
-  }
-
-  sendJson(res, result.created ? 201 : 200, {
-    id: result.id,
-    version: draft.version,
-    status: result.status,
-    created: result.created,
-  });
-}
-
-function keyMatches(given: string, expected: string): boolean {
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
 }
 
 /**

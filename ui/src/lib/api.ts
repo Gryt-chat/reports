@@ -83,59 +83,6 @@ export interface Stats {
   pending: number;
   bugs: number;
   feedback: number;
-  /** Release notes drafted and not yet read. */
-  changelogDrafts: number;
-}
-
-/* ── Drafted release notes ───────────────────────────────────────────────── */
-
-export type ChangelogStatus = "draft" | "published" | "rejected" | "superseded";
-
-export interface ChangelogSection {
-  heading: string;
-  body: string[];
-}
-
-export interface ChangelogRecapGroup {
-  group: string;
-  items: string[];
-}
-
-/** One component's share of the commit range a note was drafted from. */
-export interface ChangelogCommitGroup {
-  component: string;
-  commits: { subject: string; body: string }[];
-}
-
-/**
- * A release note a model wrote, waiting for somebody to read it.
- *
- * `commits` is the range it was drafted from and is the reason this view
- * exists: checking a claim against the commits is the review. It never leaves
- * this service — the file the changelog page fetches carries the note alone.
- */
-export interface ChangelogEntry {
-  id: string;
-  version: string;
-  date: string;
-  channel: "latest" | "beta";
-  headline: string;
-  intro: string[];
-  sections: ChangelogSection[];
-  recap: ChangelogRecapGroup[];
-  source: {
-    since?: string;
-    commits?: number;
-    model?: string;
-    /** Which parts of Gryt moved, already worded for a reader. */
-    components?: string[];
-  } | null;
-  commits: ChangelogCommitGroup[];
-  status: ChangelogStatus;
-  draftedAt: string;
-  decidedAt: string | null;
-  decidedBy: string | null;
-  note: string | null;
 }
 
 export interface Person {
@@ -240,26 +187,6 @@ export const api = {
     request<{ id: string }>(`/reports/${id}/retriage`, { method: "POST" }),
 
   people: () => request<{ people: Person[] }>("/people"),
-
-  changelog: (status?: ChangelogStatus) =>
-    request<{ entries: ChangelogEntry[] }>(
-      `/changelog${status ? `?status=${status}` : ""}`,
-    ),
-
-  /** Put the note on the changelog page. Seconds, and no rebuild. */
-  publishChangelog: (id: string) =>
-    request<{ id: string; status: ChangelogStatus; published: boolean }>(
-      `/changelog/${id}/publish`,
-      { method: "POST" },
-    ),
-
-  /** Refuse it. The text is kept, which is how a bad draft gets diagnosed. */
-  rejectChangelog: (id: string, note: string | null) =>
-    request<{ id: string; status: ChangelogStatus }>(`/changelog/${id}/reject`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ note }),
-    }),
 
   addPerson: (identifier: string, note: string | null) =>
     request<{ identifier: string }>("/people", {

@@ -140,26 +140,6 @@ export interface Config {
     };
   };
 
-  /**
-   * The review gate for drafted release notes.
-   *
-   * `ops/internal/changelog-notes.mjs` drafts a note after a release and posts
-   * it here rather than writing the file the changelog page reads, so nothing
-   * a model wrote is live until somebody has read it in the inbox.
-   *
-   * Without a key the endpoint is not there at all. It is a write endpoint on
-   * a service whose whole point is that a public POST route is guarded, and an
-   * unconfigured deployment must not be the exception.
-   *
-   * Without a file nothing is published anywhere — the inbox still takes and
-   * shows drafts, which is what a deployment that is not the one behind
-   * gryt.chat should do.
-   */
-  changelog: {
-    key: string | null;
-    file: string | null;
-  };
-
   discordWebhookUrl: string | null;
   /** Notify on arrival, after triage, or not at all. */
   notifyOn: "receive" | "triage" | "never";
@@ -342,11 +322,6 @@ export function loadConfig(): Config {
         },
       };
     })(),
-
-    changelog: {
-      key: process.env.REPORTS_CHANGELOG_KEY?.trim() || null,
-      file: process.env.REPORTS_CHANGELOG_FILE?.trim() || null,
-    },
 
     discordWebhookUrl: process.env.REPORTS_DISCORD_WEBHOOK_URL?.trim() || null,
     notifyOn: (process.env.REPORTS_NOTIFY_ON as Config["notifyOn"]) || "triage",
