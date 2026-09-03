@@ -225,6 +225,24 @@ its reason names the reports behind it so it can be checked and lifted from the
 inbox rather than taken on trust — it's the one place here where a model's
 answer takes an action rather than sorting a queue.
 
+**A report can be deleted, and the deletion leaves a note.** The privacy policy
+says we'll delete one on request, and until GRYT-890 the only way to do that was
+to open the SQLite file. There's a Delete button on the report now, in the
+dashboard and on the plain page, and both need the report id sent back as a
+confirmation — nothing else here is irreversible, so it asks twice.
+
+What's left behind is a row in `deletions`: the id, the time, who did it, and
+the reason typed in the note field. None of what was written. A deletion has to
+be reviewable, or you can't tell a request that was honoured from a row that
+vanished, and it mustn't be a second copy of the thing somebody asked to be rid
+of.
+
+If the report was filed as a task, the note keeps the task URL and the button
+says so. The board entry quotes what the report said and nothing here holds a
+credential that could delete it, so somebody has to go and do that. Deleting the
+report and leaving the task without saying so would honour the letter of the
+request and not the request.
+
 **The address doesn't stay.** After `REPORTS_RETAIN_IDENTIFIER_DAYS` (2) the IP
 and the identity thumbprint are nulled out on the report. The auto-ban above is
 the only thing that reads them, its window is a day, and a ban it issues copies

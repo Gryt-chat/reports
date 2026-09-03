@@ -17,13 +17,19 @@ import {
 interface ReportViewProps {
   report: Report;
   onChanged: (id: string, status: ReportStatus, note: string | null) => void;
+  onDeleted: (id: string) => void;
 }
 
-export function ReportView({ report, onChanged }: ReportViewProps) {
+export function ReportView({ report, onChanged, onDeleted }: ReportViewProps) {
   const location = useLocation();
   const [note, setNote] = useState(report.status_note ?? "");
   const [busy, setBusy] = useState<ReportStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /* Two presses, not a browser confirm(). The dialog is easy to dismiss by
+     reflex and this is the one action on the page that does not come back. */
+  const [armed, setArmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   /* The model's answer, held here until somebody files or discards it. Nothing
      reaches the board while this is on screen. */
@@ -63,7 +69,31 @@ export function ReportView({ report, onChanged }: ReportViewProps) {
   useEffect(() => {
     setNote(report.status_note ?? "");
     setError(null);
+    /* Without this, arming on one report and clicking through to the next
+       leaves the second one a single press from being deleted. */
+    setArmed(false);
   }, [report.id, report.status_note]);
+
+  async function remove() {
+    setDeleting(true);
+    setError(null);
+    try {
+      const gone = await api.deleteReport(report.id, note.trim() || null);
+      onDeleted(report.id);
+      if (gone.task_url) {
+        /* The board entry quotes what the report said and nothing here can
+           delete it. Somebody has to go and do that, so say which one. */
+        window.alert(
+          `Report deleted. ${gone.task_url} still quotes it — remove that too if the request was to be forgotten.`,
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "It would not delete.");
+      setArmed(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   /**
    * Deciding is optimistic and silent.
@@ -195,6 +225,23 @@ export function ReportView({ report, onChanged }: ReportViewProps) {
               {drafting ? "Drafting…" : "Create task"}
             </Button>
           )}
+          {/* Last, and away from the decide buttons, because it is the one
+              action here that does not come back. The note field above is the
+              reason, so a deletion is recorded with the same words a decision
+              would have been. */}
+          <Button
+            size="small"
+            tone={armed ? "danger" : "ghost"}
+            disabled={busy !== null || deleting}
+            onClick={() => (armed ? void remove() : setArmed(true))}
+          >
+            {deleting ? "Deleting…" : armed ? "Delete for good?" : "Delete"}
+          </Button>
+          {armed && !deleting ? (
+            <Button size="small" tone="ghost" onClick={() => setArmed(false)}>
+              Keep it
+            </Button>
+          ) : null}
         </div>
 
         {draft ? (
