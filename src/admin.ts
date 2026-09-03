@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { Config } from "./config.ts";
 import {
+  deleteReport,
   addAdmin,
   addBan,
   countAdmins,
@@ -305,7 +306,7 @@ async function handlePost(
 ): Promise<void> {
   // The HTML pages post to /admin/reports/…, everything else to
   // /admin/api/reports/…. Same actions, so one route answers both.
-  const action = path.match(/^\/admin(?:\/api)?\/reports\/([\w-]+)\/(read|retriage)$/);
+  const action = path.match(/^\/admin(?:\/api|\/plain)?\/reports\/([\w-]+)\/(read|retriage)$/);
   if (action) {
     const [, id, verb] = action;
     if (!getReport(id)) throw new HttpError(404, "not_found", "No such report");
@@ -362,6 +363,57 @@ async function handlePost(
     return;
   }
 
+  /* Delete one, for somebody who asked us to. The privacy policy says we will,
+     and until this route existed the only way to honour it was to open the
+     SQLite file by hand.
+
+     A POST rather than a DELETE because this handler answers GET and POST only,
+     and the plain page has to reach it from a form. It is the shape the other
+     per-report actions already use.
+
+     What comes back names the task if there was one. Deleting the report does
+     not delete the board entry, which quotes what the report said, and this
+     service holds no credential that could. Saying so is the difference between
+     honouring the request and appearing to. */
+  const deleting = path.match(/^\/admin(?:\/api|\/plain)?\/reports\/([\w-]+)\/delete$/);
+  if (deleting) {
+    const id = deleting[1];
+    const raw = (await readBody(req, 16 * 1024)).toString("utf8");
+    const fields = (header(req, "content-type") ?? "").includes("application/json")
+      ? (JSON.parse(raw || "{}") as { confirm?: string; reason?: string })
+      : (Object.fromEntries(new URLSearchParams(raw)) as {
+          confirm?: string;
+          reason?: string;
+        });
+
+    /* Nothing here is undoable, and every other POST on this path is. An
+       explicit confirm means a mistyped URL or a repeated request cannot take a
+       report out on its own. */
+    if (fields.confirm !== id) {
+      throw new HttpError(
+        400,
+        "confirm_required",
+        "Send confirm with the report id to delete it",
+      );
+    }
+
+    const by = actor.kind === "person" ? actor.name : "the admin token";
+    const reason = fields.reason?.toString().trim().slice(0, 500) || null;
+    const note = deleteReport(id, by, reason);
+    if (!note) throw new HttpError(404, "not_found", "No such report");
+
+    if (path.startsWith("/admin/api/")) {
+      sendJson(res, 200, { id, deleted_at: note.deleted_at, task_url: note.task_url });
+      return;
+    }
+
+    res.writeHead(303, {
+      location: path.startsWith("/admin/plain") ? "/admin/plain" : "/admin",
+    });
+    res.end();
+    return;
+  }
+
   // Send this week's digest now, to everybody who would get it on the day.
   if (path === "/admin/api/digest/send" && req.method === "POST") {
     const result = await digest.sendNow();
@@ -371,7 +423,7 @@ async function handlePost(
 
   // Setting a status takes a form post from the detail page and a JSON body
   // from anything else, so it accepts both rather than having two routes.
-  const decide = path.match(/^\/admin(?:\/api)?\/reports\/([\w-]+)\/status$/);
+  const decide = path.match(/^\/admin(?:\/api|\/plain)?\/reports\/([\w-]+)\/status$/);
   if (decide) {
     const id = decide[1];
     if (!getReport(id)) throw new HttpError(404, "not_found", "No such report");
@@ -398,7 +450,11 @@ async function handlePost(
       return;
     }
 
-    res.writeHead(303, { location: `/admin/reports/${id}` });
+    res.writeHead(303, {
+      location: path.startsWith("/admin/plain")
+        ? `/admin/plain/reports/${id}`
+        : `/admin/reports/${id}`,
+    });
     res.end();
     return;
   }
@@ -1095,6 +1151,20 @@ function detailPage(r: ReportRow, actor: Actor, base: string): string {
        </form>
      </p>
      ${bans ? `<p class="muted">Bannable: ${bans} — POST /admin/api/bans</p>` : ""}
+     <h2>Delete this report</h2>
+     <p class="muted">
+       For somebody who asked us to. It does not come back${
+         r.task_url
+           ? `, and it will not remove <a href="${esc(r.task_url)}">the task it was filed as</a>, which quotes what it said`
+           : ""
+       }.
+     </p>
+     <form method="post" action="${base}/reports/${esc(r.id)}/delete"
+           onsubmit="return confirm('Delete this report? It does not come back.')">
+       <input type="hidden" name="confirm" value="${esc(r.id)}">
+       <input type="text" name="reason" placeholder="Why, for the record" maxlength="500">
+       <button type="submit">Delete</button>
+     </form>
      <h2>Everything the app sent</h2>
      <pre>${esc(JSON.stringify(payload, null, 2))}</pre>`,
   );

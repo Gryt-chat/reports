@@ -1,6 +1,6 @@
 import { Alert } from "@gryt/ui";
 import { useCallback, useEffect, useState } from "react";
-import { Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import { Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { Rail } from "./components/Rail";
 import {
@@ -82,6 +82,15 @@ export function App() {
     [],
   );
 
+  /* A deleted report leaves the queue at once. Re-fetching would be more
+     correct and would also leave the row on screen for as long as the request
+     takes, which reads as the button not having worked. The counts catch up on
+     the next load, same as a decision. */
+  const onDeleted = useCallback((id: string) => {
+    setReports((current) => current.filter((report) => report.id !== id));
+    setTotal((current) => Math.max(0, current - 1));
+  }, []);
+
   return (
     <Routes>
       <Route
@@ -104,6 +113,7 @@ export function App() {
             loading={loading}
             error={error}
             onChanged={onChanged}
+            onDeleted={onDeleted}
           />
         }
       />
@@ -117,6 +127,7 @@ export function App() {
             loading={loading}
             error={error}
             onChanged={onChanged}
+            onDeleted={onDeleted}
           />
         }
       />
@@ -131,10 +142,20 @@ interface WorkbenchProps {
   loading: boolean;
   error: string | null;
   onChanged: (id: string, status: ReportStatus, note: string | null) => void;
+  onDeleted: (id: string) => void;
 }
 
-function Workbench({ reports, total, stats, loading, error, onChanged }: WorkbenchProps) {
+function Workbench({
+  reports,
+  total,
+  stats,
+  loading,
+  error,
+  onChanged,
+  onDeleted,
+}: WorkbenchProps) {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [report, setReport] = useState<Report | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
 
@@ -180,6 +201,10 @@ function Workbench({ reports, total, stats, loading, error, onChanged }: Workben
         ) : report ? (
           <ReportView
             report={report}
+            onDeleted={(reportId) => {
+              onDeleted(reportId);
+              navigate("/");
+            }}
             onChanged={(reportId, status, note) => {
               onChanged(reportId, status, note);
               setReport((current) =>

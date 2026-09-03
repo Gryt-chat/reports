@@ -171,6 +171,19 @@ export const api = {
       body: JSON.stringify({ status, note }),
     }),
 
+  /** Delete one, for somebody who asked us to. It does not come back. */
+  deleteReport: (id: string, reason: string | null) =>
+    request<{ id: string; deleted_at: string; task_url: string | null }>(
+      `/reports/${id}/delete`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        /* The id again. The server refuses without it, so a stray request
+           cannot take a report out on its own. */
+        body: JSON.stringify({ confirm: id, reason }),
+      },
+    ),
+
   /** Ask the model for a task. Creates nothing. */
   draftTask: (id: string) =>
     request<TaskDraft>(`/reports/${id}/task/draft`, { method: "POST" }),

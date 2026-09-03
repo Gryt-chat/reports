@@ -86,6 +86,18 @@ export function initDb(dataDir: string): void {
 
     -- One row per accepted report, used only for counting. Kept in SQLite
     -- rather than in memory so a restart is not a way to clear your limit.
+    /* What is left when a report is deleted.
+       A deletion has to be reviewable — otherwise nobody can tell a request
+       that was honoured from a row that vanished — and it must not be a second
+       copy of the thing somebody asked us to be rid of. So this holds the id,
+       the day, who did it and why, and none of what was written. */
+    CREATE TABLE IF NOT EXISTS deletions (
+      report_id   TEXT PRIMARY KEY,
+      deleted_at  TEXT NOT NULL,
+      deleted_by  TEXT,
+      reason      TEXT,
+      task_url    TEXT
+    );
     CREATE TABLE IF NOT EXISTS rate_events (
       bucket  TEXT NOT NULL,
       at      INTEGER NOT NULL
@@ -771,6 +783,69 @@ export function countRateEvents(bucket: string, since: number): number {
     .prepare("SELECT COUNT(*) AS n FROM rate_events WHERE bucket = ? AND at >= ?")
     .all(bucket, since);
   return Number(rows[0]?.n ?? 0);
+}
+
+export interface DeletionRow {
+  report_id: string;
+  deleted_at: string;
+  deleted_by: string | null;
+  reason: string | null;
+  task_url: string | null;
+}
+
+/**
+ * Delete a report and leave a note saying it happened.
+ *
+ * Returns false if there was no such report, so a double submit is not
+ * reported as a second deletion.
+ *
+ * `task_url` is copied onto the note rather than followed. If the report was
+ * filed on the board, the task quotes what it said and this service holds no
+ * credential that could delete it — so the honest thing is to record where the
+ * remaining copy is and tell whoever pressed the button. Deleting the report
+ * and silently leaving the task would honour the letter of the request and not
+ * the request.
+ */
+export function deleteReport(
+  id: string,
+  by: string | null,
+  reason: string | null,
+): DeletionRow | null {
+  const db = handle();
+  const report = getReport(id);
+  if (!report) return null;
+
+  const note: DeletionRow = {
+    report_id: id,
+    deleted_at: new Date().toISOString(),
+    deleted_by: by,
+    reason,
+    task_url: report.task_url,
+  };
+
+  db.exec("BEGIN");
+  try {
+    db.prepare(
+      `INSERT OR REPLACE INTO deletions (report_id, deleted_at, deleted_by, reason, task_url)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(note.report_id, note.deleted_at, note.deleted_by, note.reason, note.task_url);
+    db.prepare("DELETE FROM reports WHERE id = ?").run(id);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+
+  return note;
+}
+
+/** The notes, newest first, for the deletions page. */
+export function listDeletions(limit = 100): DeletionRow[] {
+  return rowsAs<DeletionRow>(
+    handle()
+      .prepare("SELECT * FROM deletions ORDER BY deleted_at DESC LIMIT ?")
+      .all(Math.min(Math.max(limit, 1), 500)),
+  );
 }
 
 export function pruneRateEvents(before: number): void {
