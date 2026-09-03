@@ -28,6 +28,7 @@ import {
 import { notify } from "./notify.ts";
 import { oidcFrom, type OidcConfig } from "./oidc.ts";
 import { newReportId, normaliseReport } from "./report.ts";
+import { scrubOldIdentifiers } from "./retention.ts";
 import { Triager } from "./triage.ts";
 
 async function main(): Promise<void> {
@@ -51,7 +52,13 @@ async function main(): Promise<void> {
     });
   });
 
-  const prune = setInterval(() => pruneOldEvents(Date.now()), 60 * 60 * 1000);
+  /* At boot as well as on the timer. A service that is restarted more often
+     than once an hour would otherwise never reach the scrub. */
+  scrubOldIdentifiers(config, Date.now());
+  const prune = setInterval(() => {
+    pruneOldEvents(Date.now());
+    scrubOldIdentifiers(config, Date.now());
+  }, 60 * 60 * 1000);
   prune.unref();
 
   server.listen(config.port, config.host, () => {

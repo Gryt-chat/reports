@@ -777,6 +777,31 @@ export function pruneRateEvents(before: number): void {
   handle().prepare("DELETE FROM rate_events WHERE at < ?").run(before);
 }
 
+/**
+ * Null out the sender's address and identity thumbprint on reports received
+ * before `before`, an ISO timestamp. Returns how many rows changed.
+ *
+ * `install_id` and `user_agent` are left. Neither says who or where: an install
+ * id is meaningless outside this database and is what lets triage see that a
+ * crash report and last week's crash report came from the same copy of the app,
+ * and a user-agent is the app version and the OS, which the row already carries
+ * in its own columns.
+ *
+ * The `WHERE` clause names both columns as well as the date so a row that has
+ * already been scrubbed is not rewritten every hour for the life of the
+ * database. `changes` is a bigint on some builds of node:sqlite, hence Number.
+ */
+export function scrubReportIdentifiers(before: string): number {
+  const result = handle()
+    .prepare(
+      `UPDATE reports SET ip = NULL, identity_subject = NULL
+       WHERE received_at < ?
+         AND (ip IS NOT NULL OR identity_subject IS NOT NULL)`,
+    )
+    .run(before);
+  return Number(result.changes ?? 0);
+}
+
 /** True if this assertion id has been used before. Records it either way. */
 export function claimAssertion(jti: string, expiresAt: number): boolean {
   const db = handle();
