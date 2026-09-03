@@ -106,7 +106,7 @@ export async function createTask(
   config: Config,
 ): Promise<{ id: number; url: string }> {
   const { url, token, projectId } = config.vikunja;
-  if (!token) {
+  if (!url || !token) {
     throw new HttpError(503, "no_board", "No board is configured for this service");
   }
 

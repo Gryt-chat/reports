@@ -103,12 +103,16 @@ export interface Config {
    * The board a report can be filed onto.
    *
    * A write credential for Vikunja, so it lives here rather than anywhere in
-   * the repository. Without a token the Create task button is not offered —
-   * an inbox that shows a button which cannot work is worse than one that does
+   * the repository. The address lives here for the same reason: it names
+   * somebody's tracker, and a default would file tasks onto whoever's board
+   * was compiled in rather than onto the one whoever runs this service meant.
+   *
+   * Without both a URL and a token the Create task button is not offered — an
+   * inbox that shows a button which cannot work is worse than one that does
    * not show it.
    */
   vikunja: {
-    url: string;
+    url: string | null;
     token: string | null;
     projectId: number;
   };
@@ -295,10 +299,7 @@ export function loadConfig(): Config {
     },
 
     vikunja: {
-      url: (process.env.REPORTS_VIKUNJA_URL?.trim() || "https://tasks.sivert.io").replace(
-        /\/$/,
-        "",
-      ),
+      url: process.env.REPORTS_VIKUNJA_URL?.trim().replace(/\/$/, "") || null,
       token: process.env.REPORTS_VIKUNJA_TOKEN?.trim() || null,
       projectId: int("REPORTS_VIKUNJA_PROJECT", 2, 1, 1_000_000),
     },
