@@ -225,14 +225,15 @@ its reason names the reports behind it so it can be checked and lifted from the
 inbox rather than taken on trust — it's the one place here where a model's
 answer takes an action rather than sorting a queue.
 
-**The identifiers don't stay.** After `REPORTS_RETAIN_IDENTIFIER_DAYS` (30) the
-address, the install id and the user-agent are nulled out on the report. Nothing
-that reads them looks back that far — the widest window is the auto-ban one, a
-day by default, and a ban copies the value into its own row with its own expiry.
-What's left is the report, which is the part with any value in it. The identity
-subject stays as well, because it's the account rather than the network and it's
-the only way to find the reports somebody asks us to delete. Set it to 0 to keep
-everything for as long as the report exists.
+**The address doesn't stay.** After `REPORTS_RETAIN_IDENTIFIER_DAYS` (2) the IP
+and the identity thumbprint are nulled out on the report. The auto-ban above is
+the only thing that reads them, its window is a day, and a ban it issues copies
+the value into its own row with its own expiry — so after two days nothing needs
+the report's copy. The install id and the user-agent stay: neither says who or
+where, the user-agent is the app version and the OS the row already carries, and
+the install id is what shows that a crash report and last week's crash report
+came from the same copy of the app. Set it to 0 to keep everything for as long
+as the report exists.
 
 ## Triage
 
@@ -431,7 +432,7 @@ before deploying:
 | `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. |
 | `REPORTS_TRUSTED_PROXIES` | — | And believe it only from these addresses. Empty believes any peer, which is only right when nothing but the proxy can reach the port. |
 | `REPORTS_CORS_ORIGINS` | — | Browser origins allowed to POST. The web client needs listing. |
-| `REPORTS_RETAIN_IDENTIFIER_DAYS` | `30` | How long a report keeps the address, install id and user-agent. 0 keeps them forever. |
+| `REPORTS_RETAIN_IDENTIFIER_DAYS` | `2` | How long a report keeps the IP and the identity thumbprint. 0 keeps them forever. |
 | `DATA_DIR` | `./data` | Every report ever sent lives here. Mount it. |
 
 ```sh

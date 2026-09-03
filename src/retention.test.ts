@@ -5,11 +5,20 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 
 import type { Config } from "./config.ts";
-import { closeDb, getReport, initDb, insertReport, scrubReportIdentifiers } from "./db.ts";
+import {
+  closeDb,
+  getReport,
+  initDb,
+  insertReport,
+  saveTriage,
+  scrubReportIdentifiers,
+} from "./db.ts";
 import { scrubOldIdentifiers } from "./retention.ts";
+import { noiseBanFor } from "./triage.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 8, 3, 12, 0, 0);
+const AUTO_BAN = { threshold: 3, windowHours: 24, days: 7 };
 
 before(() => initDb(mkdtempSync(join(tmpdir(), "gryt-reports-retention-"))));
 after(() => closeDb());
@@ -17,7 +26,7 @@ after(() => closeDb());
 let seq = 0;
 
 /** A stored report, sent `ageDays` ago by somebody we wrote down. */
-function stored(ageDays: number): string {
+function stored(ageDays: number, verdict: string | null = null): string {
   const id = `rep_ret${seq++}`;
   insertReport({
     id,
@@ -35,11 +44,26 @@ function stored(ageDays: number): string {
     platform: "ios",
     osVersion: "26.0",
     deviceModel: "iPhone17,1",
-    identitySubject: `subject-${id}`,
+    identitySubject: "thumb-abc",
     ip: "203.0.113.7",
     userAgent: "Gryt/1.2.3 (iOS 26.0)",
     payload: "{}",
   });
+  if (verdict) {
+    saveTriage(
+      id,
+      {
+        verdict,
+        priority: "low",
+        summary: "junk",
+        area: "unknown",
+        duplicateOf: null,
+        reasoning: "because",
+        model: "test",
+      },
+      new Date(NOW - ageDays * DAY).toISOString(),
+    );
+  }
   return id;
 }
 
@@ -53,24 +77,23 @@ function config(identifierDays: number): Config {
    scrubbed. Clearing the decks first is what makes these independent of the
    order they run in. */
 function clearDecks(): void {
-  scrubOldIdentifiers(config(30), NOW);
+  scrubOldIdentifiers(config(2), NOW);
 }
 
-test("forgets the sender of a report past the window", () => {
+test("forgets who sent a report past the window", () => {
   clearDecks();
-  const id = stored(31);
+  const id = stored(3);
 
-  assert.equal(scrubOldIdentifiers(config(30), NOW), 1);
+  assert.equal(scrubOldIdentifiers(config(2), NOW), 1);
 
   const row = getReport(id);
   assert.equal(row?.ip, null);
-  assert.equal(row?.install_id, null);
-  assert.equal(row?.user_agent, null);
+  assert.equal(row?.identity_subject, null);
 });
 
 test("keeps what the report is for", () => {
-  const id = stored(31);
-  scrubOldIdentifiers(config(30), NOW);
+  const id = stored(3);
+  scrubOldIdentifiers(config(2), NOW);
 
   const row = getReport(id);
   assert.equal(row?.message, "the thing did not work");
@@ -81,32 +104,48 @@ test("keeps what the report is for", () => {
   assert.equal(row?.device_model, "iPhone17,1");
 });
 
-/* The account link is the only way to find the reports somebody asks us to
-   delete, and it is an id we already hold in Keycloak. Scrubbing it would make
-   the promise in the privacy policy unkeepable. */
-test("keeps the identity subject", () => {
+/* Neither says who or where. The install id is meaningless outside this
+   database and is what shows two reports came from the same copy of the app;
+   the user-agent is the app version and the OS, which the row already has. */
+test("keeps the install id and the user-agent", () => {
   const id = stored(400);
-  scrubOldIdentifiers(config(30), NOW);
+  scrubOldIdentifiers(config(2), NOW);
 
-  assert.equal(getReport(id)?.identity_subject, `subject-${id}`);
+  const row = getReport(id);
+  assert.equal(row?.install_id, `install-${id}`);
+  assert.equal(row?.user_agent, "Gryt/1.2.3 (iOS 26.0)");
 });
 
 test("leaves a report inside the window alone", () => {
   clearDecks();
-  const id = stored(29);
+  const id = stored(1);
 
-  assert.equal(scrubOldIdentifiers(config(30), NOW), 0);
+  assert.equal(scrubOldIdentifiers(config(2), NOW), 0);
   assert.equal(getReport(id)?.ip, "203.0.113.7");
+});
+
+/* The whole reason the columns are kept at all. Two days has to leave the
+   auto-ban's own window — a day — intact, or the scrub has broken the only
+   thing that reads them. */
+test("the noise auto-ban still fires inside the window", () => {
+  clearDecks();
+  const ids = [stored(0, "noise"), stored(0, "noise"), stored(0, "noise")];
+
+  scrubOldIdentifiers(config(2), NOW);
+
+  const ban = noiseBanFor(getReport(ids[2])!, AUTO_BAN, NOW);
+  assert.equal(ban?.kind, "subject");
+  assert.equal(ban?.value, "thumb-abc");
 });
 
 /* Without the null checks in the WHERE clause this rewrites every old row on
    every pass, for the life of the database. */
 test("does not rewrite a report it has already scrubbed", () => {
   clearDecks();
-  stored(31);
+  stored(3);
 
-  assert.equal(scrubOldIdentifiers(config(30), NOW), 1);
-  assert.equal(scrubOldIdentifiers(config(30), NOW), 0);
+  assert.equal(scrubOldIdentifiers(config(2), NOW), 1);
+  assert.equal(scrubOldIdentifiers(config(2), NOW), 0);
 });
 
 test("zero days keeps everything, which is what it did before", () => {
@@ -121,11 +160,11 @@ test("zero days keeps everything, which is what it did before", () => {
    and the same zone — a receivedAt written any other way would sort wrong and
    scrub the wrong rows. */
 test("compares timestamps as ISO strings", () => {
-  const id = stored(31); // 2026-08-03T12:00Z
+  const id = stored(3); // 2026-08-31T12:00Z
 
-  scrubReportIdentifiers("2026-08-01T00:00:00.000Z");
+  scrubReportIdentifiers("2026-08-30T00:00:00.000Z");
   assert.equal(getReport(id)?.ip, "203.0.113.7");
 
-  scrubReportIdentifiers("2026-08-05T00:00:00.000Z");
+  scrubReportIdentifiers("2026-09-01T00:00:00.000Z");
   assert.equal(getReport(id)?.ip, null);
 });

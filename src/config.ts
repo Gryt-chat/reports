@@ -73,7 +73,8 @@ export interface Config {
   };
 
   /**
-   * How long a report keeps the identifiers that say who sent it.
+   * How long a report keeps the address and identity thumbprint that say who
+   * sent it.
    *
    * 0 keeps them forever, which is what this did before there was a setting.
    */
@@ -282,10 +283,11 @@ export function loadConfig(): Config {
     },
 
     retention: {
-      /* Thirty days is longer than anything that reads these needs — the widest
-         window is autoBan.windowHours, a day by default — and short enough that
-         an old inbox is not a list of addresses. */
-      identifierDays: int("REPORTS_RETAIN_IDENTIFIER_DAYS", 30, 0, 3650),
+      /* Two days, because the only thing that reads these is the noise auto-ban
+         and its window is autoBan.windowHours — a day by default. A ban it
+         issues copies the value into `bans` with its own expiry, so nothing
+         needs the report's copy afterwards. */
+      identifierDays: int("REPORTS_RETAIN_IDENTIFIER_DAYS", 2, 0, 3650),
     },
 
     trustProxy: bool("REPORTS_TRUST_PROXY", true),

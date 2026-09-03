@@ -8,22 +8,21 @@ const DAY = 24 * 60 * 60 * 1000;
 /**
  * Forget who sent a report, once knowing is no longer any use.
  *
- * The address, the install id and the user-agent are on a report so that one
- * person cannot flood the inbox. Every mechanism that uses them works over
- * hours or days: the rate windows are a minute, an hour and a day, the noise
- * counter looks back `autoBan.windowHours`, and a ban that comes out of it
- * copies the value into `bans` with its own expiry. None of them reads a row
- * this old.
+ * The address and the identity thumbprint are on a report for one reason: the
+ * noise auto-ban counts a submitter's junk against them. That count looks back
+ * `autoBan.windowHours`, a day by default, and a ban that comes out of it copies
+ * the value into `bans` with its own expiry. Nothing reads either column beyond
+ * that window, so `REPORTS_RETAIN_IDENTIFIER_DAYS` defaults to two days rather
+ * than to a month — long enough for the only mechanism that needs them, short
+ * enough that the inbox is not a list of addresses.
  *
- * The report itself stays. What somebody wrote is the part with value, and it
- * is still readable, still filed as a task, still countable. What goes is the
- * part that says which house it came from.
+ * `install_id` and `user_agent` stay. An install id is meaningless outside this
+ * database and is what shows that a crash report and last week's crash report
+ * came from the same copy of the app. A user-agent is the app version and the
+ * OS, both of which the row already carries in their own columns.
  *
- * `identity_subject` stays too, and that is a deliberate exception. It is the
- * account, not the network — we already hold it in Keycloak — and it is the
- * only way to answer somebody who asks us to delete the report they sent.
- * Scrubbing it would make the promise in the privacy policy unkeepable, which
- * is a worse outcome than keeping a pseudonymous id.
+ * The report itself stays whole. What somebody wrote is the part with value,
+ * and it is still readable, still filed as a task, still countable.
  */
 export function scrubOldIdentifiers(config: Config, now: number): number {
   const days = config.retention.identifierDays;
