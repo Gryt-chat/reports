@@ -72,6 +72,15 @@ export interface Config {
     days: number;
   };
 
+  /**
+   * How long a report keeps the identifiers that say who sent it.
+   *
+   * 0 keeps them forever, which is what this did before there was a setting.
+   */
+  retention: {
+    identifierDays: number;
+  };
+
   trustProxy: boolean;
   /**
    * The addresses whose forwarding headers are believed.
@@ -270,6 +279,13 @@ export function loadConfig(): Config {
       threshold: int("REPORTS_AUTO_BAN_NOISE", 3, 0, 100),
       windowHours: int("REPORTS_AUTO_BAN_WINDOW_H", 24, 1, 8760),
       days: int("REPORTS_AUTO_BAN_DAYS", 7, 1, 3650),
+    },
+
+    retention: {
+      /* Thirty days is longer than anything that reads these needs — the widest
+         window is autoBan.windowHours, a day by default — and short enough that
+         an old inbox is not a list of addresses. */
+      identifierDays: int("REPORTS_RETAIN_IDENTIFIER_DAYS", 30, 0, 3650),
     },
 
     trustProxy: bool("REPORTS_TRUST_PROXY", true),

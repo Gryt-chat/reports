@@ -777,6 +777,25 @@ export function pruneRateEvents(before: number): void {
   handle().prepare("DELETE FROM rate_events WHERE at < ?").run(before);
 }
 
+/**
+ * Null out the sender's address, install id and user-agent on reports received
+ * before `before`, an ISO timestamp. Returns how many rows changed.
+ *
+ * The `WHERE` clause names the three columns as well as the date so a row that
+ * has already been scrubbed is not rewritten every hour for the life of the
+ * database. `changes` is a bigint on some builds of node:sqlite, hence Number.
+ */
+export function scrubReportIdentifiers(before: string): number {
+  const result = handle()
+    .prepare(
+      `UPDATE reports SET ip = NULL, install_id = NULL, user_agent = NULL
+       WHERE received_at < ?
+         AND (ip IS NOT NULL OR install_id IS NOT NULL OR user_agent IS NOT NULL)`,
+    )
+    .run(before);
+  return Number(result.changes ?? 0);
+}
+
 /** True if this assertion id has been used before. Records it either way. */
 export function claimAssertion(jti: string, expiresAt: number): boolean {
   const db = handle();
