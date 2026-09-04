@@ -151,16 +151,12 @@ async function ingest(
   config: Config,
   triager: Triager,
 ): Promise<void> {
-  // A browser that was told to post here by somebody else's page.
-  //
-  // Only browsers send an Origin, so this is not a check a native client can
-  // fail — the mobile app sends none. It is not a check the *desktop* app
-  // escapes, though: it serves its own UI over loopback, so its renderer sends
-  // one like any other page. `isAllowedOrigin` is where that is handled.
+  // Only browsers send an Origin, so a native client cannot fail this — but the
+  // desktop app serves its own UI over loopback and does send one, which
+  // `isAllowedOrigin` handles.
   //
   // What this stops is a page on the open web making somebody's browser file
-  // reports: CORS already stops that page reading the answer, but the report
-  // lands in the table either way, and that is the part worth refusing.
+  // reports. CORS stops it reading the answer; the report lands either way.
   const origin = header(req, "origin");
   if (origin && !isAllowedOrigin(origin, config.corsOrigins)) {
     throw new HttpError(403, "origin_not_allowed", "Not a place reports come from");
@@ -203,17 +199,12 @@ async function ingest(
 
   const id = newReportId(now, randomBytes(4).toString("hex"));
 
-  // A banned submitter is thanked and ignored.
-  //
-  // The 403 this used to return told somebody they had been banned, which is
-  // the one piece of information that makes a ban worth working around: it
-  // says the address or the install they just used is the one to change, and
-  // it says it immediately after each attempt, which is a free oracle for
-  // finding an identifier that still works.
+  // **A banned submitter is thanked and ignored.** A 403 says which identifier
+  // to change, immediately after each attempt, which is a free oracle for
+  // finding one that still works.
   //
   // So the answer is the same 202 and the same shape of id as an accepted
-  // report. Nothing is stored. The attempt is counted, both against the ban —
-  // so the inbox can say whether it is still absorbing anything — and against
+  // report. Nothing is stored. The attempt is counted, against the ban and
   // the ordinary buckets, so switching networks arrives with part of the new
   // address's budget already spent.
   const ban = banFor(who, nowIso);

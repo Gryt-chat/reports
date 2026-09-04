@@ -8,13 +8,10 @@ const DAY = 24 * 60 * 60 * 1000;
 /**
  * Forget who sent a report, once knowing is no longer any use.
  *
- * The address and the identity thumbprint are on a report for one reason: the
- * noise auto-ban counts a submitter's junk against them. That count looks back
- * `autoBan.windowHours`, a day by default, and a ban that comes out of it copies
- * the value into `bans` with its own expiry. Nothing reads either column beyond
- * that window, so `REPORTS_RETAIN_IDENTIFIER_DAYS` defaults to two days rather
- * than to a month — long enough for the only mechanism that needs them, short
- * enough that the inbox is not a list of addresses.
+ * The address and thumbprint exist for one reason: the noise auto-ban counts a
+ * submitter's junk against them, over `autoBan.windowHours`. **Nothing reads
+ * either column beyond that window**, so the retention default is two days
+ * rather than a month.
  *
  * `install_id` and `user_agent` stay. An install id is meaningless outside this
  * database and is what shows that a crash report and last week's crash report

@@ -22,32 +22,21 @@
  *   Colour    light  bg #f1f2f7 · surface #fff · border #dadde6 · text #1f2129
  *             dark   bg #111318 · surface #1a1d24 · border #2b303d · text #e0e0e6
  *
- * That list is the thing to check when the library moves. An email that says
- * 8px where the app says 20px, or a rounded rectangle where the app has a
- * pill, is a different product wearing the same colours.
+ * **That list is the thing to check when the library moves.** An email that
+ * says 8px where the app says 20px is a different product wearing the same
+ * colours.
  *
- * ## What it says, and in what order
+ * The news first in a sentence, then the figures laid out the way the inbox
+ * lays out reports, then what is still open. Bugs, feedback and their sum are
+ * not three independent things, so they are not three equal columns.
  *
- * The news first, in a sentence, because that is how the rest of Gryt talks —
- * "Five bug reports and two pieces of feedback." Then the figures, laid out
- * the way the inbox lays out reports: the number hanging in a narrow left
- * column, the label beside it. Then what is still open, which is the only part
- * anybody can act on.
+ * **Every element that carries a colour also carries a class.** The inline
+ * value is what a client stripping the `<style>` block renders, and the class
+ * is the only handle the dark-mode block has — one without the other renders
+ * dark ink on a dark surface.
  *
- * Postmark's digest puts three independent measurements in three equal
- * columns. Bugs, feedback, and their sum is not three independent things, and
- * three equal columns would say it was.
- *
- * ## Rendering
- *
- * Tables, inline styles, literal colours. Every element that carries a colour
- * also carries a class, because the inline value is what a client that strips
- * the `<style>` block renders and the class is the only handle the dark-mode
- * block has. An element with one and not the other renders dark ink on a dark
- * surface, which is what the first draft did to both figures.
- *
- * The mark is a PNG attached by content id rather than an SVG by URL: Gmail
- * and Outlook render neither remote SVG nor, by default, remote images at all.
+ * The mark is a PNG attached by content id: Gmail and Outlook render neither
+ * remote SVG nor, by default, remote images at all.
  */
 
 export interface Week {
@@ -147,14 +136,8 @@ function esc(value: string): string {
 
 /**
  * One figure, laid out the way the inbox lays out a report: the number in a
- * narrow left column, the label beside it. Not a tile — tiles imply the two
- * are independent measurements, and the row below adds them together.
- *
- * There used to be a second line under the label carrying the change since the
- * previous week. It is gone: the digest says what arrived, and a reader who
- * wants to know whether that is more or less than last time has last week's
- * mail. Without it the label is a single line, so it centres against the
- * figure rather than sitting at its top.
+ * narrow left column, the label beside it. **Not a tile** — tiles imply the
+ * measurements are independent, and the row below adds them together.
  */
 function row(count: number, label: string, last: boolean): string {
   return `
@@ -167,16 +150,12 @@ function row(count: number, label: string, last: boolean): string {
 }
 
 /**
- * Where reports come from, as one bar.
+ * Where reports come from, as one bar. A proportion is the one thing a row of
+ * figures is bad at, and table cells with percentage widths are the only chart
+ * an email can draw.
  *
- * A stacked bar rather than a list of numbers because the question it answers
- * is a proportion — which app is generating the reports — and a proportion is
- * the one thing a row of figures is bad at. Table cells with percentage widths
- * and background colours, which is the only chart an email can draw.
- *
- * Segments under 3% get 3% anyway. A one-report app rendering as a zero-width
- * sliver is a segment that is in the legend and not in the bar, which reads as
- * a rendering fault rather than as a small number.
+ * **Segments under 3% get 3% anyway.** A zero-width sliver is a segment that is
+ * in the legend and not in the bar, which reads as a rendering fault.
  */
 function bar(byApp: { app: string; count: number }[], total: number): string {
   if (total === 0 || byApp.length === 0) return "";

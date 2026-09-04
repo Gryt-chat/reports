@@ -363,18 +363,13 @@ async function handlePost(
     return;
   }
 
-  /* Delete one, for somebody who asked us to. The privacy policy says we will,
-     and until this route existed the only way to honour it was to open the
-     SQLite file by hand.
+  /* Delete one, for somebody who asked us to. A POST rather than a DELETE
+     because this handler answers GET and POST only and the plain page reaches
+     it from a form.
 
-     A POST rather than a DELETE because this handler answers GET and POST only,
-     and the plain page has to reach it from a form. It is the shape the other
-     per-report actions already use.
-
-     What comes back names the task if there was one. Deleting the report does
-     not delete the board entry, which quotes what the report said, and this
-     service holds no credential that could. Saying so is the difference between
-     honouring the request and appearing to. */
+     **What comes back names the task if there was one.** Deleting the report
+     does not delete the board entry, which quotes what it said, and this
+     service holds no credential that could. */
   const deleting = path.match(/^\/admin(?:\/api|\/plain)?\/reports\/([\w-]+)\/delete$/);
   if (deleting) {
     const id = deleting[1];
@@ -573,16 +568,13 @@ function markReadFor(path: string): void {
  */
 
 /**
- * What somebody sees when their Gryt account is not on the list.
+ * What somebody sees when their Gryt account is not on the list. One thing and
+ * one action, and no apology: there is nobody reading a form, so an apology
+ * invites a reply that has nowhere to go.
  *
- * It says one thing and offers one action. There is nothing to appeal to here
- * and nobody reading a form, so it does not apologise: an apology invites a
- * reply that has nowhere to go.
- *
- * It does not print their user id. The earlier version did, on the theory that
- * they could send it to somebody and be added — but the list takes an email or
- * a username, so the id was never needed, and handing an identifier to somebody
- * who was just turned away is giving away the one thing they did not have.
+ * **It does not print their user id.** The list takes an email or a username,
+ * so the id was never needed, and handing an identifier to somebody just turned
+ * away gives away the one thing they did not have.
  *
  * Self-contained on purpose. The person seeing it has no session, so it cannot
  * load the dashboard's stylesheet or its fonts — those are behind the same
@@ -706,15 +698,13 @@ function deniedPage(name: string): string {
 }
 
 /**
- * The Set-Cookie headers that end a session, whichever kind it was.
+ * The Set-Cookie headers that end a session. **Both cookies get cleared every
+ * time** — either alone keeps somebody signed in, and the token cookie outlives
+ * a Keycloak session by thirty days.
  *
- * Both cookies get cleared every time. Either one on its own is enough to keep
- * somebody signed in, and the token cookie outlives a Keycloak session by
- * thirty days, so clearing only the session cookie left the inbox open.
- *
- * The attributes have to match what each was set with. A Set-Cookie whose Path
- * or SameSite differs deletes nothing, and the response looks identical to one
- * that worked — same status, same header, still signed in.
+ * **The attributes have to match what each was set with.** A Set-Cookie whose
+ * Path or SameSite differs deletes nothing, and looks identical to one that
+ * worked.
  */
 export function signOutCookies(secure: boolean): string[] {
   const flag = secure ? " Secure;" : "";

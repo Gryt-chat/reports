@@ -64,13 +64,9 @@ export function sendHtml(
   status: number,
   html: string,
   /**
-   * A looser policy, for the one page that needs one.
-   *
-   * The digest preview renders a mail template, and a mail template has an
-   * inline image and a webfont — both of which `default-src 'none'` refuses,
-   * so the preview showed a broken mark and the wrong typeface. Passed in per
-   * response rather than widened here: the inbox renders text strangers wrote
-   * and its policy should stay as tight as it is.
+   * A looser policy for the digest preview, which has an inline image and a
+   * webfont. **Passed in per response rather than widened here** — the inbox
+   * renders text strangers wrote.
    */
   csp = "default-src 'none'; style-src 'unsafe-inline'",
 ): void {
@@ -87,13 +83,11 @@ export function sendHtml(
 }
 
 /**
- * Who sent this.
- *
- * Behind the tunnel the socket address is the proxy, so the client address has
- * to come from a header — and a header is only worth reading when something in
- * front is known to set it, hence REPORTS_TRUST_PROXY. `cf-connecting-ip` is
- * the one Cloudflare sets and strips; the rightmost `x-forwarded-for` entry is
- * the one the nearest proxy appended, which is the only one it can vouch for.
+ * Who sent this. Behind the tunnel the socket address is the proxy, and **a
+ * header is only worth reading when something in front is known to set it**,
+ * hence REPORTS_TRUST_PROXY. `cf-connecting-ip` is the one Cloudflare sets and
+ * strips; the rightmost `x-forwarded-for` entry is the only one the nearest
+ * proxy can vouch for.
  *
  * `trustedProxies` is what decides whether to believe any of it. The ingest
  * port is published on the machine's network address, so the tunnel is not the
@@ -155,26 +149,16 @@ export function header(req: IncomingMessage, name: string): string | null {
 }
 
 /**
- * Whether a browser origin may post reports.
+ * Whether a browser origin may post reports. **One function, because the CORS
+ * header and the store decision have to answer the same way** — two copies of
+ * the condition drift once and then refuse a real client.
  *
- * One function because there are two questions — may this response carry CORS
- * headers, and may this report be stored — and they have to answer the same
- * way. They were two copies of the same condition, which is a thing that
- * drifts once and then refuses a real client for a reason nobody can find.
+ * **Loopback is always allowed.** The desktop client serves its own UI from a
+ * local HTTP server on a port the OS may reassign, so no list can name it.
  *
- * ## Loopback is always allowed
- *
- * The desktop client serves its own UI from a local HTTP server — port 15738,
- * or whatever the OS hands out when that one is taken — so its renderer is a
- * browser context and sends an `Origin` like any other. No list can name it:
- * the port is not fixed, and the app is not a deployment somebody configures.
- *
- * This costs nothing. `Origin` is set by the browser from the page's real
- * origin and cannot be forged by the page, so a site on the open web can never
- * claim to be `http://127.0.0.1:15738` — which is the entire thing this check
- * exists to stop. What loopback describes is software already running on the
- * reporter's own machine, and something running there has easier ways to post
- * a report than driving the browser into doing it.
+ * It costs nothing: `Origin` is set by the browser from the page's real origin
+ * and cannot be forged, so a site on the open web can never claim to be
+ * loopback. What it describes is software already on the reporter's machine.
  */
 export function isAllowedOrigin(origin: string, allowed: string[]): boolean {
   if (allowed.includes("*") || allowed.includes(origin)) return true;

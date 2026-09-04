@@ -794,17 +794,12 @@ export interface DeletionRow {
 }
 
 /**
- * Delete a report and leave a note saying it happened.
+ * Delete a report and leave a note saying it happened. False if there was no
+ * such report, so a double submit is not a second deletion.
  *
- * Returns false if there was no such report, so a double submit is not
- * reported as a second deletion.
- *
- * `task_url` is copied onto the note rather than followed. If the report was
- * filed on the board, the task quotes what it said and this service holds no
- * credential that could delete it — so the honest thing is to record where the
- * remaining copy is and tell whoever pressed the button. Deleting the report
- * and silently leaving the task would honour the letter of the request and not
- * the request.
+ * **`task_url` is copied onto the note rather than followed.** The task quotes
+ * what the report said and this service holds no credential that could delete
+ * it, so the honest thing is to record where the remaining copy is.
  */
 export function deleteReport(
   id: string,
@@ -854,17 +849,14 @@ export function pruneRateEvents(before: number): void {
 
 /**
  * Null out the sender's address and identity thumbprint on reports received
- * before `before`, an ISO timestamp. Returns how many rows changed.
+ * before `before`. Returns how many rows changed.
  *
- * `install_id` and `user_agent` are left. Neither says who or where: an install
- * id is meaningless outside this database and is what lets triage see that a
- * crash report and last week's crash report came from the same copy of the app,
- * and a user-agent is the app version and the OS, which the row already carries
- * in its own columns.
+ * **`install_id` and `user_agent` are left.** Neither says who or where: an
+ * install id is meaningless outside this database and is what lets triage tie
+ * two crash reports to one copy of the app.
  *
- * The `WHERE` clause names both columns as well as the date so a row that has
- * already been scrubbed is not rewritten every hour for the life of the
- * database. `changes` is a bigint on some builds of node:sqlite, hence Number.
+ * The `WHERE` names both columns as well as the date, so an already-scrubbed
+ * row is not rewritten every hour for the life of the database.
  */
 export function scrubReportIdentifiers(before: string): number {
   const result = handle()
@@ -967,16 +959,12 @@ export function findAdmin(
 
 /** Record that they were here, and pin the entry to their user id. */
 /**
- * Record who signed in, and where to reach them.
+ * Record who signed in, and where to reach them. The email is written here
+ * rather than when somebody is added, because this is the only point it is
+ * known to be real — `oidc.ts` discards an unverified address.
  *
- * The email is written here rather than when somebody is added, because that
- * is the only point it is known to be real: `oidc.ts` discards an address the
- * identity provider has not verified, and an unverified one in a mailing list
- * is a bounce at best.
- *
- * Null does not overwrite. Somebody whose provider stops returning a verified
- * address should keep the one they signed in with last, rather than silently
- * dropping off the digest.
+ * **Null does not overwrite**, or somebody whose provider stops returning a
+ * verified address silently drops off the digest.
  */
 export function touchAdmin(
   id: string,

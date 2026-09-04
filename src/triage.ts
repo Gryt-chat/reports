@@ -249,16 +249,13 @@ function toRowFields(result: TriageResult): Partial<ReportRow> {
 }
 
 /**
- * Whether this report's sender has earned a ban, and what it should say.
+ * Whether this report's sender has earned a ban. **The one place in this
+ * service where a model's answer takes an action rather than sorting a queue**,
+ * so it is pure and exported and can be checked without running one.
  *
- * Pure and exported so the rule can be read and tested on its own. It is the
- * one place in this service where a model's answer takes an action rather than
- * sorting a queue, which is worth being able to check without running one.
- *
- * **Only `noise` counts.** That verdict means empty, a test post, spam, or
- * nothing to do with Gryt. `not_a_bug` deliberately does not: it means a
- * feature request or a support question, and somebody who sends three of those
- * is the most engaged person using Gryt rather than an abuser. Counting it
+ * **Only `noise` counts.** `not_a_bug` means a feature request or a support
+ * question, and somebody who sends three of those is the most engaged person
+ * using Gryt rather than an abuser. Counting it
  * would silence exactly the people this inbox exists for, and they would never
  * be told why.
  *
