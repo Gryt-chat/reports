@@ -83,22 +83,16 @@ export interface VerifiedIdentity {
 }
 
 /**
- * Verify that whoever posted this holds a Gryt identity key.
+ * Verify that whoever posted this holds a Gryt identity key. It ties repeat
+ * submissions together without collecting anything about the person, and lets
+ * an abuser be banned by key rather than by whatever IP they were on.
  *
- * Every client already has one — joining a server is a signed challenge, and
- * the same key signs this. What that buys over the app key: repeat submissions
- * from one key can be tied together without collecting anything about the
- * person behind it, and an abuser can be banned by key rather than by whatever
- * IP they happened to be on.
+ * **No challenge round trip, so three things prevent replay together:** the
+ * assertion is bound to this exact body through `bh`, it expires in five
+ * minutes, and its `jti` is good exactly once.
  *
- * There is no challenge round trip, so replay is prevented by three things
- * instead: the assertion is bound to this exact body through `bh`, it expires
- * in five minutes, and its `jti` is good exactly once.
- *
- * The identifier stored is the key's thumbprint, not a Gryt server's derived
- * subject. This service authorises nothing on any server, so it has no need to
- * agree with a server's namespace — and the thumbprint is what those subjects
- * are derived from anyway.
+ * The identifier stored is the key's thumbprint, not a server's derived
+ * subject — this service authorises nothing on any server.
  */
 export async function verifyIdentity(
   token: string,

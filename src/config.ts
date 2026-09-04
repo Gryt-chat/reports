@@ -53,15 +53,12 @@ export interface Config {
   /**
    * Banning whoever keeps sending junk, decided by the triage pass.
    *
-   * Only the `noise` verdict counts — empty submissions, test posts, spam,
-   * nothing to do with Gryt. `not_a_bug` deliberately does not, because that
-   * verdict means a feature request or a support question, and the person who
-   * sends three of those is the most engaged user Gryt has rather than an
-   * abuser.
+   * **Only the `noise` verdict counts.** `not_a_bug` means a feature request or
+   * a support question, and somebody who sends three of those is the most
+   * engaged user Gryt has.
    *
-   * The ban expires. A permanent one taken out by a model on three strikes is
-   * a decision nobody reviews, and the failure is invisible: somebody stops
-   * being able to report bugs and never finds out why.
+   * **The ban expires.** A permanent one taken out by a model on three strikes
+   * is a decision nobody reviews, and its failure is invisible.
    */
   autoBan: {
     /** Noise reports before a ban. 0 turns this off. */
@@ -110,16 +107,11 @@ export interface Config {
   };
 
   /**
-   * The board a report can be filed onto.
+   * The board a report can be filed onto. Both the credential and the address
+   * live here rather than in the repository — **a default would file tasks onto
+   * whoever's board was compiled in.**
    *
-   * A write credential for Vikunja, so it lives here rather than anywhere in
-   * the repository. The address lives here for the same reason: it names
-   * somebody's tracker, and a default would file tasks onto whoever's board
-   * was compiled in rather than onto the one whoever runs this service meant.
-   *
-   * Without both a URL and a token the Create task button is not offered — an
-   * inbox that shows a button which cannot work is worse than one that does
-   * not show it.
+   * Without both, the Create task button is not offered.
    */
   vikunja: {
     url: string | null;
@@ -128,14 +120,9 @@ export interface Config {
   };
 
   /**
-   * The weekly digest, and where it is sent from.
-   *
-   * `GRYT_SMTP_*` rather than a set of its own, because the box already has
-   * those pointed at Postmark for the rest of Gryt. A second copy would be a
-   * second thing to rotate.
-   *
+   * The weekly digest. `GRYT_SMTP_*` rather than a set of its own, since the
+   * box already has those and a second copy is a second thing to rotate.
    * Without a host the digest does not run and the service starts as normal.
-   * It is an addition, not a dependency.
    */
   digest: {
     enabled: boolean;

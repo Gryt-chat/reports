@@ -27,16 +27,11 @@ export interface LimitConfig {
 }
 
 /**
- * The ban covering this submitter, if there is one.
+ * The ban covering this submitter, if there is one. Four kinds, weakest first:
+ * an IP moves, an install id is stable until a reinstall, a key thumbprint
+ * costs a new identity to shed, and an app id turns off a whole client.
  *
- * Four kinds, because the useful one depends on what you know. An IP is what
- * you always have and the weakest — it moves. An install id is stable until
- * someone reinstalls. A key thumbprint costs a new identity to shed, which is
- * the closest thing here to banning a person. An app id is the blunt one: it
- * turns off a whole client, and exists for the day a key leaks and the endpoint
- * is being hammered through it.
- *
- * Returns rather than throws, because a banned submitter is not told. See
+ * Returns rather than throws, because **a banned submitter is not told.** See
  * `ingest`.
  */
 export function banFor(who: Submitter, nowIso: string): BanRow | null {
@@ -57,15 +52,9 @@ export function banFor(who: Submitter, nowIso: string): BanRow | null {
 }
 
 /**
- * Count an attempt that a ban swallowed.
- *
- * Without this a ban is completely silent in both directions: the person
- * hitting it cannot tell, and neither can you. The inbox reads this back so a
- * ban can say whether it is still absorbing anything, which is the difference
- * between one that worked and one that is now just sitting there.
- *
- * Pruned with the other rate events after a day, so it answers "recently"
- * rather than "ever", which is the more useful question anyway.
+ * Count an attempt that a ban swallowed — otherwise a ban is silent in both
+ * directions, and the inbox cannot say whether it is still absorbing anything.
+ * Pruned with the other rate events after a day, so it answers "recently".
  */
 export function recordBlocked(who: Submitter, ban: BanRow, now: number): void {
   recordRateEvent(`blocked:${ban.id}`, now);

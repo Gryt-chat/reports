@@ -6,16 +6,13 @@ import type { Config } from "./config.ts";
 import { HttpError } from "./http.ts";
 
 /**
- * Signing in to the inbox with a Gryt account.
+ * Signing in to the inbox with a Gryt account, rather than a shared token —
+ * there is one of that, everyone who has had it still has it, and rotating it
+ * logs out the tooling too.
  *
- * The alternative was a shared token, and a shared token cannot be given to
- * somebody and later taken back — there is one of it, everyone who has ever had
- * it still has it, and rotating it logs out the tooling too.
- *
- * Keycloak says who somebody is. It does not say whether they may read the
- * inbox: that list lives in this service's own database, because it is a list
- * of two or three people and putting it in the realm would mean opening the
- * Keycloak admin console to add somebody's partner to a board.
+ * **Keycloak says who somebody is, not whether they may read the inbox.** That
+ * list is in this service's own database: it is two or three people, and the
+ * realm would mean opening the Keycloak admin console to add one.
  *
  * The static token stays for programmatic access. A person gets a session; a
  * script gets a bearer token, and neither has to pretend to be the other.

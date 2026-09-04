@@ -1,13 +1,9 @@
 import { HttpError } from "./http.ts";
 
 /**
- * What a report is, and what a client is expected to fill in.
- *
- * Only `type` and `message` are required. Everything else is diagnostics, and
- * diagnostics are read by a person, not by code — so a field the app got wrong
- * is truncated or dropped rather than rejected. A report lost to a validation
- * error is a bug nobody hears about, which is worse than a report arriving with
- * one odd field in it.
+ * What a report is, and what a client is expected to fill in. **Only `type` and
+ * `message` are required, and a bad field is truncated or dropped rather than
+ * rejected** — a report lost to a validation error is a bug nobody hears about.
  *
  * The whole normalised object is stored alongside the columns, so a field an
  * app sends before this service knows about it still lands in `extra` and is

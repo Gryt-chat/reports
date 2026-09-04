@@ -5,14 +5,11 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 
 /**
  * The dashboard: a built Vite app, served by the service that owns the data.
+ * Same origin on purpose — the session cookie is simply sent, so there is no
+ * token in JavaScript, no CORS and no second place to check the allowlist.
  *
- * Same origin as the API on purpose. The session cookie is simply sent, so
- * there is no token in JavaScript and nowhere for one to leak from — and no
- * CORS, no second deploy, no third place for the allowlist to be checked.
- *
- * If it was never built, everything here is inert and the plain pages answer
- * instead. That is what makes the plain pages worth keeping: a broken frontend
- * build cannot take the inbox down with it.
+ * **If it was never built, everything here is inert and the plain pages
+ * answer**, so a broken frontend build cannot take the inbox down with it.
  */
 
 const TYPES: Record<string, string> = {
@@ -94,13 +91,10 @@ export class Dashboard {
     res.writeHead(200, {
       "content-type": type,
       "content-length": stat.size,
-      // `private`, not `public`. Vite hashes every asset filename so a year is
-      // safe in the browser that fetched it — but these sit behind the session
-      // now, and `public` invites every shared cache between here and there to
-      // keep a copy and hand it to whoever asks next. Cloudflare did exactly
-      // that: after the gate went in, the edge kept serving a copy it had
-      // stored while the file was still open, and the origin refusing the
-      // request made no difference to anybody who never reached it.
+      // **`private`, not `public`.** These sit behind the session, and `public`
+      // invites every shared cache to keep a copy and hand it to whoever asks
+      // next — Cloudflare did exactly that, and the origin refusing the request
+      // made no difference to anybody who never reached it.
       //
       // index.html is not hashed and must never be stored at all, or a deploy
       // leaves people on a shell pointing at assets that no longer exist.
