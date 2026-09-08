@@ -86,11 +86,8 @@ export function initDb(dataDir: string): void {
 
     -- One row per accepted report, used only for counting. Kept in SQLite
     -- rather than in memory so a restart is not a way to clear your limit.
-    /* What is left when a report is deleted.
-       A deletion has to be reviewable — otherwise nobody can tell a request
-       that was honoured from a row that vanished — and it must not be a second
-       copy of the thing somebody asked us to be rid of. So this holds the id,
-       the day, who did it and why, and none of what was written. */
+    /* What is left when a report is deleted: the id, the day, who did it and why, and none
+       of what was written. A deletion has to be reviewable and must not be a second copy. */
     CREATE TABLE IF NOT EXISTS deletions (
       report_id   TEXT PRIMARY KEY,
       deleted_at  TEXT NOT NULL,
@@ -175,11 +172,8 @@ export function initDb(dataDir: string): void {
 }
 
 /**
- * Add columns a database made by an older build does not have.
- *
- * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
- * without this a service that has been taking reports for a while would start
- * up fine and then fail on the first query naming a new column.
+ * Add columns a database made by an older build does not have. `CREATE TABLE IF NOT EXISTS`
+ * does nothing to an existing table, so it would fail on the first query naming a new one.
  */
 function migrate(db: DatabaseSync): void {
   const columns = new Set(
@@ -241,12 +235,8 @@ export type ReportType = "bug" | "feedback";
 export type TriageStatus = "pending" | "done" | "error";
 
 /**
- * What has been decided about a report, as opposed to what triage thinks of it.
- *
- * `new` and `open` are the two that are still yours to deal with, and the
- * inbox shows those by default. The other three are ways of being done: fixed,
- * decided against, or already covered by another report. A closed report is
- * still there and still searchable — nothing here deletes one.
+ * What has been decided about a report, as opposed to what triage thinks of it. `new` and
+ * `open` are still yours; the other three are ways of being done. Nothing here deletes one.
  */
 export const REPORT_STATUSES = [
   "new",
@@ -307,11 +297,8 @@ export interface ReportRow {
 }
 
 /**
- * A report without its `payload`.
- *
- * The payload is the whole diagnostics blob and is by far the biggest column,
- * so a listing that returned it would be mostly bytes nobody asked for —
- * whether the thing reading is a browser or a model going through the queue.
+ * A report without its `payload`. The payload is the whole diagnostics blob and by far the
+ * biggest column, so a listing that returned it would be mostly bytes nobody asked for.
  */
 export type ReportSummary = Omit<ReportRow, "payload">;
 
@@ -347,10 +334,8 @@ export interface NewReport {
 }
 
 /**
- * node:sqlite types every row as `Record<string, SQLOutputValue>`, which does
- * not structurally overlap a named interface. The queries below select exactly
- * the columns their interface names, so the conversion is sound; keeping it in
- * one place beats an `as unknown as` at every call site.
+ * node:sqlite types every row as `Record<string, SQLOutputValue>`, which does not overlap a
+ * named interface. The queries select exactly the columns their interface names.
  */
 function rowsAs<T>(rows: Record<string, SQLOutputValue>[]): T[] {
   return rows as unknown as T[];
@@ -473,18 +458,13 @@ export function countReports(f: CountFilter): number {
 }
 
 /**
- * Decide what happens to a report.
- *
- * The note is where the reason goes — a Vikunja id for something now tracked,
- * a sentence for something turned down. A closed report keeps everything it
- * arrived with; closing is a label, not a delete.
+ * Decide what happens to a report. The note is where the reason goes, and a closed report
+ * keeps everything it arrived with: closing is a label, not a delete.
  */
+
 /**
- * Record the task a report became.
- *
- * Both directions matter: the task names the report in its description, and
- * this is the other half, so the inbox can say a report has already been filed
- * rather than offering to file it again.
+ * Record the task a report became. Both directions matter: the task names the report, and
+ * this is the other half, so the inbox does not offer to file it again.
  */
 export function setTask(id: string, taskId: number, taskUrl: string): void {
   handle()
@@ -644,12 +624,8 @@ export function findBan(kind: BanKind, value: string, nowIso: string): BanRow | 
 }
 
 /**
- * How many reports from this submitter triage called `noise` lately.
- *
- * `identity_subject` first, `ip` second, because the subject survives a change
- * of network and an address does not. Counted from `received_at` rather than
- * from when triage ran: somebody who posts ten things in a minute and is
- * triaged an hour later should count as ten in that minute.
+ * How many reports from this submitter triage called `noise` lately. `identity_subject`
+ * first, because the subject survives a change of network. Counted from `received_at`.
  */
 export function countNoiseFrom(
   kind: "subject" | "ip",
@@ -685,11 +661,8 @@ export function noiseReportIds(
 }
 
 /**
- * How many of each type arrived in a window.
- *
- * Two counts rather than a group-by, because a week with no feedback should
- * report zero rather than leaving the key out — a digest that silently omits
- * a row reads as a bug in the digest.
+ * How many of each type arrived in a window. Two counts rather than a group-by, because a
+ * week with no feedback should report zero rather than leaving the key out.
  */
 export function countByTypeBetween(fromIso: string, toIso: string): {
   bug: number;
@@ -718,12 +691,8 @@ export function totalsByType(): { bug: number; feedback: number } {
 }
 
 /**
- * Which app they came from, most first.
- *
- * `app_id` is whatever the client put in `X-Gryt-App`, so this is the list the
- * apps actually name themselves rather than a fixed set — a client nobody has
- * written yet will appear here on its own, and an app id nobody recognises is
- * worth seeing rather than bucketing into "other".
+ * Which app they came from, most first, from whatever the client put in `X-Gryt-App`. An app
+ * id nobody recognises is worth seeing rather than bucketing into "other".
  */
 export function totalsByApp(): { app: string; count: number }[] {
   const rows = handle()
@@ -744,9 +713,8 @@ export function adminEmails(): { name: string; email: string }[] {
   const out: { name: string; email: string }[] = [];
 
   for (const row of rows) {
-    // The stored address if they have signed in; otherwise what was typed to
-    // add them, but only when that was an address. Somebody added by username
-    // and never seen is skipped rather than guessed at.
+    // The stored address if they have signed in; otherwise what was typed to add them, but
+    // only when that was an address. Somebody added by username is skipped, not guessed at.
     const email = row.email ?? (row.identifier.includes("@") ? row.identifier : null);
     if (!email) continue;
 
@@ -794,12 +762,8 @@ export interface DeletionRow {
 }
 
 /**
- * Delete a report and leave a note saying it happened. False if there was no
- * such report, so a double submit is not a second deletion.
- *
- * **`task_url` is copied onto the note rather than followed.** The task quotes
- * what the report said and this service holds no credential that could delete
- * it, so the honest thing is to record where the remaining copy is.
+ * Delete a report and leave a note saying it happened; false if there was no such report.
+ * `task_url` is copied onto the note rather than followed — we hold no credential for it.
  */
 export function deleteReport(
   id: string,
@@ -848,15 +812,8 @@ export function pruneRateEvents(before: number): void {
 }
 
 /**
- * Null out the sender's address and identity thumbprint on reports received
- * before `before`. Returns how many rows changed.
- *
- * **`install_id` and `user_agent` are left.** Neither says who or where: an
- * install id is meaningless outside this database and is what lets triage tie
- * two crash reports to one copy of the app.
- *
- * The `WHERE` names both columns as well as the date, so an already-scrubbed
- * row is not rewritten every hour for the life of the database.
+ * Null out the sender's address and identity thumbprint on reports received before `before`.
+ * `install_id` and `user_agent` are left: neither says who or where.
  */
 export function scrubReportIdentifiers(before: string): number {
   const result = handle()
@@ -929,12 +886,8 @@ export function removeAdmin(id: string): void {
 }
 
 /**
- * Find the entry admitting this person.
- *
- * Matched on the Keycloak user id first, since that is the one thing about an
- * account nobody can change. Username and email are how somebody gets added
- * before they have ever signed in, and stop being consulted for that entry the
- * moment the id is known.
+ * Find the entry admitting this person, matched on the Keycloak user id first, since that is
+ * the one thing nobody can change. Username and email are how somebody gets added.
  */
 export function findAdmin(
   subject: string,
@@ -958,13 +911,10 @@ export function findAdmin(
 }
 
 /** Record that they were here, and pin the entry to their user id. */
+
 /**
- * Record who signed in, and where to reach them. The email is written here
- * rather than when somebody is added, because this is the only point it is
- * known to be real — `oidc.ts` discards an unverified address.
- *
- * **Null does not overwrite**, or somebody whose provider stops returning a
- * verified address silently drops off the digest.
+ * Record who signed in, and where to reach them. Null does not overwrite, or somebody whose
+ * provider stops returning a verified address silently drops off the digest.
  */
 export function touchAdmin(
   id: string,

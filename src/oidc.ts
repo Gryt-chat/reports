@@ -6,16 +6,8 @@ import type { Config } from "./config.ts";
 import { HttpError } from "./http.ts";
 
 /**
- * Signing in to the inbox with a Gryt account, rather than a shared token —
- * there is one of that, everyone who has had it still has it, and rotating it
- * logs out the tooling too.
- *
- * **Keycloak says who somebody is, not whether they may read the inbox.** That
- * list is in this service's own database: it is two or three people, and the
- * realm would mean opening the Keycloak admin console to add one.
- *
- * The static token stays for programmatic access. A person gets a session; a
- * script gets a bearer token, and neither has to pretend to be the other.
+ * Signing in to the inbox with a Gryt account rather than a shared token. Keycloak says who
+ * somebody is, not whether they may read the inbox: that list is this service's own.
  */
 
 export interface OidcConfig {
@@ -24,11 +16,8 @@ export interface OidcConfig {
   clientSecret: string;
   redirectUri: string;
   /**
-   * Who gets in the first time, before there is anybody to add anybody.
-   *
-   * A username or an email. It only applies while the list is empty — after
-   * that the list is the answer and this is ignored, so leaving it set does
-   * not quietly re-admit somebody who was removed.
+   * Who gets in the first time, before there is anybody to add anybody. It only applies
+   * while the list is empty, so leaving it set does not re-admit somebody removed.
    */
   bootstrap: string | null;
   sessionSecret: string;
@@ -47,11 +36,8 @@ let cached: Endpoints | null = null;
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 /**
- * Ask the realm where its endpoints are, once.
- *
- * Written down in configuration they would be four more strings to get wrong,
- * and they are all derivable from the issuer, which is the one string that has
- * to match exactly anyway — it is what the tokens claim.
+ * Ask the realm where its endpoints are, once. Written down they would be four more strings
+ * to get wrong, and all are derivable from the issuer, which has to match anyway.
  */
 async function discover(config: OidcConfig): Promise<Endpoints> {
   if (cached) return cached;
@@ -121,10 +107,8 @@ export async function startLogin(config: OidcConfig): Promise<LoginStart> {
 }
 
 /**
- * Where to land after the realm has ended the session.
- *
- * Derived from the callback URL rather than configured separately, because the
- * two have to be on the same origin and one string is one fewer to get wrong.
+ * Where to land after the realm has ended the session. Derived from the callback URL, since
+ * the two have to be on the same origin and one string is one fewer to get wrong.
  */
 export function postLogoutTarget(redirectUri: string): string {
   return new URL("/admin/login", redirectUri).toString();
