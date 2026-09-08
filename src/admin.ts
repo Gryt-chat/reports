@@ -54,23 +54,16 @@ const LOGIN_COOKIE = "gryt_reports_login";
 const PAGE_SIZE = 50;
 
 /**
- * Who is asking.
- *
- * A person signed in with their Gryt account, or a script holding the static
- * token. Both may read the inbox; only a person shows up in the page header,
- * and only a person can be taken off the list later.
+ * Who is asking: a person signed in with their Gryt account, or a script holding the static
+ * token. Both may read the inbox; only a person can be taken off the list later.
  */
 type Actor =
   | { kind: "token" }
   | { kind: "person"; subject: string; name: string };
 
 /**
- * The inbox.
- *
- * Server-rendered, no build step and no client JavaScript, because the whole
- * page is text strangers typed and the fewer ways there are to run something,
- * the better. The JSON routes underneath it are the same data for anything
- * that would rather read it than look at it.
+ * The inbox. Server-rendered, no build step and no client JavaScript, because the whole page
+ * is text strangers typed. The JSON routes underneath are the same data.
  */
 export async function handleAdmin(
   req: IncomingMessage,
@@ -88,9 +81,8 @@ export async function handleAdmin(
 
   const path = url.pathname.replace(/\/+$/, "") || "/admin";
 
-  // Outside the `if (oidc)` below on purpose. A deployment guarded by the
-  // static token has no Keycloak, so signing out was not a route at all there
-  // — it fell through to whatever came after and never cleared anything.
+  // Outside the `if (oidc)` below on purpose: a deployment guarded by the static token has
+  // no Keycloak, so signing out was not a route there and never cleared anything.
   if (path === "/admin/logout") {
     // Off to the realm when there is one, so the SSO session ends too and
     // /admin/login asks for a password instead of handing back a fresh code.
@@ -114,10 +106,8 @@ export async function handleAdmin(
     }
   }
 
-  // Signing in with the static token is one link with it on. It is swapped for
-  // a cookie immediately so it stops turning up in history and referrers. Only
-  // when nothing better is configured — with Keycloak on, people sign in and
-  // the token is for scripts.
+  // Signing in with the static token is one link with it on, swapped for a cookie
+  // immediately so it stops turning up in history. Only when nothing better is configured.
   const queryToken = url.searchParams.get("token");
   if (queryToken && config.adminToken && !oidc) {
     if (!tokenMatches(queryToken, config.adminToken)) {
@@ -133,11 +123,8 @@ export async function handleAdmin(
 
   const actor = authorise(req, config, oidc);
   if (!actor) {
-    // A browser gets sent to sign in. Anything asking for JSON, or holding a
-    // wrong token, gets told plainly rather than handed a redirect to parse —
-    // and so does a script or a stylesheet, because a page whose session ran
-    // out would otherwise fetch its assets and be handed the HTML of a login
-    // page with a JavaScript content type.
+    // A browser gets sent to sign in; anything asking for JSON, or a script or stylesheet,
+    // gets told plainly — or it fetches its assets and is handed a login page as JavaScript.
     if (
       oidc &&
       req.method === "GET" &&
@@ -160,17 +147,15 @@ export async function handleAdmin(
     throw new HttpError(405, "method_not_allowed", "GET or POST");
   }
 
-  // Behind the auth check with everything else. These were served in front of
-  // it on the theory that the sign-in page needed them to style itself — it
-  // does not, because the sign-in page is Keycloak's.
+  // Behind the auth check with everything else. These were served in front of it on the
+  // theory that the sign-in page needed them, which it does not: it is Keycloak's.
   if (dashboard?.available && path.startsWith("/admin/assets/")) {
     if (dashboard.asset(res, url.pathname)) return;
     throw new HttpError(404, "not_found", "No such asset");
   }
 
-  // The dashboard owns the routes a person opens. The plain pages are still
-  // there under /admin/plain — they are the fallback when a build is broken,
-  // and they cost nothing to keep.
+  // The dashboard owns the routes a person opens. The plain pages are still there under
+  // /admin/plain — the fallback when a build is broken, and they cost nothing to keep.
   const plain = path.startsWith("/admin/plain");
   if (dashboard?.available && !plain && !path.startsWith("/admin/api")) {
     if (
@@ -183,9 +168,8 @@ export async function handleAdmin(
   }
 
   if (path === "/admin/api/stats") {
-    // The version rides along here rather than on /healthz. Health is public
-    // and says only that the process is alive; which release is running is a
-    // fact for somebody who has signed in.
+    // The version rides along here rather than on /healthz: health is public and says only
+    // that the process is alive, and which release is running is for somebody signed in.
     sendJson(res, 200, {
       ...stats(),
       service: "gryt-reports",
@@ -195,9 +179,8 @@ export async function handleAdmin(
     return;
   }
 
-  // What this week's digest would say, rendered rather than described. A mail
-  // template nobody can look at without waiting for a Monday is a mail template
-  // that ships wrong.
+  // What this week's digest would say, rendered rather than described. A mail template
+  // nobody can look at without waiting for a Monday is one that ships wrong.
   if (path === "/admin/digest/mark.png") {
     const mark = markPng();
     if (!mark) throw new HttpError(404, "not_found", "No mark on disk");
@@ -214,10 +197,8 @@ export async function handleAdmin(
       live ? weekFor(new Date()) : sampleWeek(),
       config.publicUrl,
     );
-    // `cid:` resolves inside a mail client and nowhere else. Inlined as a data
-    // URI rather than pointed at the route above, because the browser fetches
-    // an <img> without the session and gets a 401 — which renders as the
-    // broken box this preview exists to catch. Everything else is verbatim.
+    // `cid:` resolves inside a mail client and nowhere else. Inlined as a data URI, because
+    // the browser fetches an <img> without the session and gets a 401.
     const mark = markPng();
     sendHtml(
       res,
@@ -236,11 +217,8 @@ export async function handleAdmin(
   }
 
   if (path === "/admin/api/bans") {
-    // `blocked` is how many attempts each ban has swallowed in the last day.
-    // Without it a ban is silent in both directions — the person hitting it is
-    // told nothing, by design, and so is everybody else. This is the
-    // difference between a ban that is still doing work and one that is just
-    // sitting there.
+    // `blocked` is how many attempts each ban has swallowed in the last day. Without it a
+    // ban is silent in both directions, and this is what separates working from sitting.
     const now = Date.now();
     sendJson(res, 200, {
       bans: listBans().map((ban) => ({ ...ban, blocked: blockedCount(ban.id, now) })),
@@ -363,13 +341,9 @@ async function handlePost(
     return;
   }
 
-  /* Delete one, for somebody who asked us to. A POST rather than a DELETE
-     because this handler answers GET and POST only and the plain page reaches
-     it from a form.
-
-     **What comes back names the task if there was one.** Deleting the report
-     does not delete the board entry, which quotes what it said, and this
-     service holds no credential that could. */
+  /* Delete one, for somebody who asked us to. A POST rather than a DELETE because this
+     handler answers GET and POST only, and the plain page reaches it from a form.
+     What comes back names the task: deleting the report does not delete the board entry. */
   const deleting = path.match(/^\/admin(?:\/api|\/plain)?\/reports\/([\w-]+)\/delete$/);
   if (deleting) {
     const id = deleting[1];
@@ -381,9 +355,8 @@ async function handlePost(
           reason?: string;
         });
 
-    /* Nothing here is undoable, and every other POST on this path is. An
-       explicit confirm means a mistyped URL or a repeated request cannot take a
-       report out on its own. */
+    /* Nothing here is undoable, and every other POST on this path is. An explicit confirm
+       means a mistyped URL cannot take a report out on its own. */
     if (fields.confirm !== id) {
       throw new HttpError(
         400,
@@ -562,24 +535,11 @@ function markReadFor(path: string): void {
 }
 
 /* Hallmark · page: no-access · genre: modern-minimal · nav: none · footer: none
- * tone: utilitarian · enrichment: none (typography only) · motion: none
- * theme: Gryt dark, copied — see the token block below for why
- * pre-emit critique: P5 H5 E4 S5 R5 V4
- */
+ * tone: utilitarian · motion: none · theme: Gryt dark, copied · critique: P5 H5 E4 S5 R5 V4 */
 
 /**
- * What somebody sees when their Gryt account is not on the list. One thing and
- * one action, and no apology: there is nobody reading a form, so an apology
- * invites a reply that has nowhere to go.
- *
- * **It does not print their user id.** The list takes an email or a username,
- * so the id was never needed, and handing an identifier to somebody just turned
- * away gives away the one thing they did not have.
- *
- * Self-contained on purpose. The person seeing it has no session, so it cannot
- * load the dashboard's stylesheet or its fonts — those are behind the same
- * check that produced this page. Hence a local copy of Gryt's dark palette
- * rather than the usual aliases onto --gryt-*, and a system font stack.
+ * What somebody sees when their Gryt account is not on the list. It does not print their
+ * user id, and it is self-contained: they have no session, so the stylesheet is behind it.
  */
 function deniedPage(name: string): string {
   return `<!doctype html>
@@ -593,9 +553,8 @@ function deniedPage(name: string): string {
     --color-paper-2: #1a1d24;
     --color-rule: #2b303d;
     --color-ink: #e0e0e6;
-    /* A step lighter than the library's muted, which lands at 4.4:1 on this
-       paper. This page is four lines long and every one of them has to be
-       readable by somebody who is already annoyed. */
+    /* A step lighter than the library's muted, which lands at 4.4:1 on this paper. This page
+       is four lines long and every one has to be readable by somebody already annoyed. */
     --color-ink-2: #9a9aa4;
     --color-accent: #968ff8;
     --color-accent-light: #b4afff;
@@ -698,13 +657,8 @@ function deniedPage(name: string): string {
 }
 
 /**
- * The Set-Cookie headers that end a session. **Both cookies get cleared every
- * time** — either alone keeps somebody signed in, and the token cookie outlives
- * a Keycloak session by thirty days.
- *
- * **The attributes have to match what each was set with.** A Set-Cookie whose
- * Path or SameSite differs deletes nothing, and looks identical to one that
- * worked.
+ * The Set-Cookie headers that end a session. Both cookies get cleared every time, and the
+ * attributes have to match what each was set with or a Set-Cookie deletes nothing.
  */
 export function signOutCookies(secure: boolean): string[] {
   const flag = secure ? " Secure;" : "";
@@ -738,9 +692,8 @@ function authorise(
     const raw = cookie(req, SESSION_COOKIE);
     if (raw) {
       const session = readSession(oidc, raw, Date.now());
-      // Checked against the list on every request rather than trusted for the
-      // life of the cookie, so removing somebody takes effect immediately
-      // instead of whenever their session happens to expire.
+      // Checked against the list on every request rather than trusted for the life of the
+      // cookie, so removing somebody takes effect immediately.
       if (session && findAdmin(session.subject, session.name, null)) {
         return { kind: "person", subject: session.subject, name: session.name };
       }
@@ -819,11 +772,8 @@ async function returnFromKeycloak(
 }
 
 /**
- * The list decides, with one exception: the first person in.
- *
- * An empty list would otherwise lock everyone out of the thing that manages it.
- * The bootstrap name only applies while the list is empty, so removing somebody
- * later does not quietly let them back in through the same door.
+ * The list decides, with one exception: the first person in, because an empty list would
+ * lock everyone out. It only applies while the list is empty.
  */
 function admit(oidc: OidcConfig, person: Person): AdminRow | null {
   const existing = findAdmin(person.subject, person.name, person.email);
@@ -929,11 +879,8 @@ function page(title: string, body: string): string {
 }
 
 /**
- * Which of the two plain surfaces this request came in by.
- *
- * `/admin/plain` is the fallback for a broken dashboard build, so its links
- * have to stay inside it. When the dashboard is not built at all these same
- * pages answer at `/admin`, and then the links belong there.
+ * Which of the two plain surfaces this request came in by. `/admin/plain` is the fallback
+ * for a broken dashboard build, so its links stay inside it; at `/admin` they belong there.
  */
 function plainBase(path: string): string {
   return path.startsWith("/admin/plain") ? "/admin/plain" : "/admin";
