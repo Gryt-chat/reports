@@ -34,9 +34,8 @@ jobs:
           cache: yarn
           cache-dependency-path: ui/yarn.lock
       - run: yarn install --frozen-lockfile
-      # `yarn build` runs tsc first, so this covers typechecking too. The
-      # service can still start without it — a dashboard that does not compile
-      # leaves the plain pages answering rather than taking the inbox down.
+      # `yarn build` runs tsc first, so this covers typechecking too. A dashboard that does
+      # not compile leaves the plain pages answering rather than taking the inbox down.
       - run: yarn build
 
   docker:

@@ -2,11 +2,8 @@
  * palette and geometry: @gryt/ui's shipped tokens · motion: none · critique: P5 H5 E5 S5 R5 V4 */
 
 /**
- * The weekly digest, written out by hand from `createGrytTheme.ts` and the component sources,
- * because `@gryt/ui` cannot be imported here. That is what to re-check when the library moves.
-
- * Every element carrying a colour also carries a class: the inline value is what a client
- * stripping `<style>` renders, and the class is the dark-mode block's only handle.
+ * The weekly digest, written out by hand from `createGrytTheme.ts`, because `@gryt/ui` cannot
+ * be imported here. Every element carrying a colour also carries a class, for dark mode.
  */
 
 export interface Week {

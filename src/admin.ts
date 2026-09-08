@@ -341,9 +341,8 @@ async function handlePost(
     return;
   }
 
-  /* Delete one, for somebody who asked us to. A POST rather than a DELETE because this
-     handler answers GET and POST only, and the plain page reaches it from a form.
-     What comes back names the task: deleting the report does not delete the board entry. */
+  /* Delete one, for somebody who asked us to. A POST because this handler answers GET and
+     POST only. Deleting the report does not delete the board entry it names. */
   const deleting = path.match(/^\/admin(?:\/api|\/plain)?\/reports\/([\w-]+)\/delete$/);
   if (deleting) {
     const id = deleting[1];

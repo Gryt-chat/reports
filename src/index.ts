@@ -116,10 +116,8 @@ async function handle(
   }
 
   if (url.pathname === "/" || url.pathname === "/healthz") {
-    // Alive, and nothing else. The name, the version and the uptime are the
-    // first three things a scan writes down: together they say which release
-    // is running and therefore which fixes are not in it. They are on
-    // /admin/api/stats instead, where whoever is asking has signed in.
+    // Alive, and nothing else. The name, version and uptime together say which release is
+    // running and therefore which fixes are not in it. They are on /admin/api/stats.
     sendJson(res, 200, { ok: true });
     return;
   }
@@ -138,12 +136,8 @@ async function handle(
 }
 
 /**
- * Take a report.
- *
- * The order matters: what the request claims about itself is checked before
- * anything is parsed, and the body is only counted against a rate limit once
- * it is going to be stored. A report that fails validation should not use up
- * somebody's hourly allowance — the app is usually the one at fault.
+ * Take a report. The order matters: what the request claims is checked before anything is
+ * parsed, and a report that fails validation does not use up somebody's hourly allowance.
  */
 async function ingest(
   req: IncomingMessage,
@@ -151,12 +145,8 @@ async function ingest(
   config: Config,
   triager: Triager,
 ): Promise<void> {
-  // Only browsers send an Origin, so a native client cannot fail this — but the
-  // desktop app serves its own UI over loopback and does send one, which
-  // `isAllowedOrigin` handles.
-  //
-  // What this stops is a page on the open web making somebody's browser file
-  // reports. CORS stops it reading the answer; the report lands either way.
+  // Only browsers send an Origin, so a native client cannot fail this — the desktop app
+  // serves over loopback and does. What this stops is a web page filing reports for somebody.
   const origin = header(req, "origin");
   if (origin && !isAllowedOrigin(origin, config.corsOrigins)) {
     throw new HttpError(403, "origin_not_allowed", "Not a place reports come from");
@@ -199,14 +189,8 @@ async function ingest(
 
   const id = newReportId(now, randomBytes(4).toString("hex"));
 
-  // **A banned submitter is thanked and ignored.** A 403 says which identifier
-  // to change, immediately after each attempt, which is a free oracle for
-  // finding one that still works.
-  //
-  // So the answer is the same 202 and the same shape of id as an accepted
-  // report. Nothing is stored. The attempt is counted, against the ban and
-  // the ordinary buckets, so switching networks arrives with part of the new
-  // address's budget already spent.
+  // A banned submitter is thanked and ignored: a 403 says which identifier to change, which
+  // is a free oracle. The attempt is still counted, so switching networks starts spent.
   const ban = banFor(who, nowIso);
   if (ban) {
     recordBlocked(who, ban, now);
@@ -254,15 +238,8 @@ async function ingest(
 }
 
 /**
- * Say which address the forwarding header was believed from, once.
- *
- * The startup warning says the header is trusted from anyone and that
- * REPORTS_TRUSTED_PROXIES should be set — and then leaves whoever reads it to
- * work out what to set it to, which needs a packet capture or a lucky guess.
- * The service is the only thing that can see the answer, so it says it.
- *
- * Once per address, because this is a fact about the deployment rather than an
- * event, and repeating it every request would bury the reports.
+ * Say which address the forwarding header was believed from, once. The service is the only
+ * thing that can see the answer, and repeating it every request would bury the reports.
  */
 const namedProxies = new Set<string>();
 

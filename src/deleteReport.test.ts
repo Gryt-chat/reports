@@ -79,9 +79,8 @@ test("the note holds none of what was written", () => {
   assert.ok(!text.includes(`install-${id}`));
 });
 
-/* The board entry quotes the report and this service holds no credential that
-   could delete it, so the note records where the remaining copy is. Losing
-   this would make the deletion look complete when it is not. */
+/* The board entry quotes the report and this service holds no credential that could delete
+   it, so the note records where the remaining copy is. */
 test("the note keeps the task url, so the other copy can be found", () => {
   const id = stored();
   setTask(id, 4242, "https://tasks.sivert.io/tasks/4242");
