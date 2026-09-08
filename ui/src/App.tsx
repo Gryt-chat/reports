@@ -58,11 +58,8 @@ export function App() {
   }, [load]);
 
   /**
-   * A decision lands in the queue immediately.
-   *
-   * Re-fetching the whole list would be more correct and would also make the
-   * row you just acted on jump under the cursor. This updates the one row and
-   * leaves the rest where they are; the counts catch up on the next load.
+   * A decision lands in the queue immediately. Re-fetching would be more correct and would
+   * make the row you just acted on jump under the cursor; the counts catch up on next load.
    */
   const onChanged = useCallback(
     (id: string, status: ReportStatus, note: string | null) => {
@@ -82,10 +79,8 @@ export function App() {
     [],
   );
 
-  /* A deleted report leaves the queue at once. Re-fetching would be more
-     correct and would also leave the row on screen for as long as the request
-     takes, which reads as the button not having worked. The counts catch up on
-     the next load, same as a decision. */
+  /* A deleted report leaves the queue at once. Re-fetching would leave the row on screen for
+     as long as the request takes, which reads as the button not having worked. */
   const onDeleted = useCallback((id: string) => {
     setReports((current) => current.filter((report) => report.id !== id));
     setTotal((current) => Math.max(0, current - 1));

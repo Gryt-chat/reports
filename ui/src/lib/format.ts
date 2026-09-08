@@ -1,11 +1,8 @@
 import type { ReportStatus, ReportSummary } from "./api";
 
 /**
- * How long ago, in the shortest form that is still unambiguous.
- *
- * Triage is a scanning job — the exact second a report arrived matters far less
- * than whether it turned up this morning or last month, and the full timestamp
- * is on the report itself for when it does.
+ * How long ago, in the shortest form that is still unambiguous. Triage is a scanning job, and
+ * the full timestamp is on the report itself for when the second matters.
  */
 export function ago(iso: string, now = Date.now()): string {
   const then = new Date(iso).getTime();
@@ -74,23 +71,16 @@ export function priorityTone(priority: string | null): "danger" | "warning" | "n
 }
 
 /**
- * The one line that stands for a report in the queue.
- *
- * Triage's summary when there is one, because it is written to be scanned;
- * otherwise whatever the person actually typed, which is never worse than a
- * placeholder.
+ * The one line that stands for a report in the queue: triage's summary when there is one,
+ * because it is written to be scanned; otherwise whatever the person typed.
  */
 export function headline(report: ReportSummary): string {
   return report.triage_summary ?? report.title ?? report.message;
 }
 
 /**
- * What to call a report that triage has not summarised.
- *
- * "Untitled report" is what this said first, which is true and useless — and it
- * was every heading until an API key turned up. Where it came from is the next
- * most useful thing, and unlike the message it is not already on screen
- * directly underneath.
+ * What to call a report that triage has not summarised. Where it came from is the next most
+ * useful thing, and unlike the message it is not already on screen underneath.
  */
 export function fallbackHeading(report: ReportSummary): string {
   const kind = report.type === "bug" ? "Bug" : "Feedback";

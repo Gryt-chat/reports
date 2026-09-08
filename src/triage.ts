@@ -240,22 +240,8 @@ function toRowFields(result: TriageResult): Partial<ReportRow> {
 }
 
 /**
- * Whether this report's sender has earned a ban. **The one place in this
- * service where a model's answer takes an action rather than sorting a queue**,
- * so it is pure and exported and can be checked without running one.
- *
- * **Only `noise` counts.** `not_a_bug` means a feature request or a support
- * question, and somebody who sends three of those is the most engaged person
- * using Gryt rather than an abuser. Counting it
- * would silence exactly the people this inbox exists for, and they would never
- * be told why.
- *
- * The subject is preferred over the address for the reason it is preferred
- * everywhere else: it survives a change of network, and shedding it costs a
- * new identity seed rather than a tap on airplane mode.
- *
- * The ban expires. A permanent one taken out by a model on three strikes is a
- * decision nobody ever reviews.
+ * Whether this report's sender has earned a ban — the one place a model's answer takes an
+ * action, so it is pure and exported. Only `noise` counts, and the ban expires.
  */
 export function noiseBanFor(
   report: ReportRow,
