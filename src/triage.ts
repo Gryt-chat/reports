@@ -18,12 +18,8 @@ import {
 import { modelFor, type TriageModel } from "./models.ts";
 
 /**
- * The verdicts triage may reach.
- *
- * There is no "delete" and no "reject" — a wrongly binned report is one nobody
- * ever sees again, and the point of this pass is to put a queue in a readable
- * order, not to shorten it. Everything stays in the inbox; the verdict only
- * decides what to read first.
+ * The verdicts triage may reach. There is no "delete" and no "reject": the point is to put a
+ * queue in a readable order, not to shorten it. Everything stays in the inbox.
  */
 const VERDICTS = ["actionable", "needs_info", "not_a_bug", "noise"] as const;
 
@@ -124,11 +120,8 @@ function duplicateContext(rows: ReportRow[], excludeId: string): string {
 
 export class Triager {
   /**
-   * The same model the triage pass uses.
-   *
-   * Read by the inbox to draft a task from a report. One instance rather than
-   * two, so a report is drafted by whatever sorted it — pointing them at
-   * different models would be a thing nobody notices until the answers differ.
+   * The same model the triage pass uses, read by the inbox to draft a task. One instance, so
+   * a report is drafted by whatever sorted it.
    */
   readonly model: TriageModel;
   private readonly config: Config;
@@ -224,10 +217,8 @@ export class Triager {
       priority: parsed.priority,
       summary: parsed.summary,
       area: parsed.area,
-      // A nullable type in a JSON schema is not something every local runtime
-      // converts to a grammar cleanly, and the ones that struggle answer with
-      // an empty string. Same meaning, so treat it as one rather than storing
-      // "" as though it named a report.
+      // A nullable type in a JSON schema is not something every local runtime converts to a
+      // grammar cleanly, and the ones that struggle answer with an empty string.
       duplicateOf: parsed.duplicate_of?.trim() ? parsed.duplicate_of : null,
       reasoning: parsed.reasoning,
       model: this.model.name,

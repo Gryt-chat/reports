@@ -2,13 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import consola from "consola";
 
 /**
- * The two things that can read a report and say what it is.
- *
- * Both answer the same question against the same schema, so a report sorted by
- * one can be compared against the other by pointing the second at it. Which one
- * did it is recorded on the report — `ollama:qwen3:8b` rather than just the
- * model name — because "the triage on this looks wrong" is a question about the
- * model as much as the report.
+ * The two things that can read a report and say what it is, against the same schema. Which
+ * one did it is recorded on the report, because "this triage looks wrong" is about the model.
  */
 export interface TriageModel {
   /** Recorded on every report this sorts. Carries the provider, not just the model. */
@@ -52,9 +47,8 @@ class AnthropicModel implements TriageModel {
       },
     });
 
-    // A safety classifier can decline a request outright, and a report full of
-    // abuse is exactly the kind that might trip one. It arrives as a 200 with
-    // no content, so it has to be checked before the content is read.
+    // A safety classifier can decline outright, and a report full of abuse is exactly the
+    // kind that trips one. It arrives as a 200 with no content, so check before reading.
     if (response.stop_reason === "refusal") {
       throw new Error(`Refused (${response.stop_details?.category ?? "no category"})`);
     }
@@ -67,12 +61,8 @@ class AnthropicModel implements TriageModel {
 }
 
 /**
- * A model on the machine, through Ollama.
- *
- * `format` takes the same JSON schema the API does, so Ollama constrains what
- * the model can emit rather than the prompt asking it nicely. That is most of
- * why a small local model is enough for this job: it does not have to be good
- * at producing JSON, only at deciding what the report is.
+ * A model on the machine, through Ollama. `format` takes the same JSON schema the API does,
+ * so Ollama constrains the output rather than the prompt asking nicely.
  */
 class OllamaModel implements TriageModel {
   readonly name: string;
@@ -100,19 +90,13 @@ class OllamaModel implements TriageModel {
       signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         model: this.model,
-        // Streamed, and not for progress — nobody is watching. Node's HTTP
-        // client gives up if headers do not arrive within five minutes, and a
-        // large model that has to load from disk and then think its way to an
-        // answer takes longer than that on a card it shares. Streaming returns
-        // the headers immediately, so the only deadline left is the one above.
+        // Streamed, and not for progress. Node gives up if headers do not arrive within five
+        // minutes, and a large model loading from disk takes longer on a shared card.
         stream: true,
         format: schema,
         keep_alive: this.keepAlive,
-        // Thinking models narrate before they answer, and `format` does not
-        // constrain the narration — only the answer. On a model running half
-        // in RAM that reasoning is most of the wall clock, and this is a
-        // four-field classification rather than a problem to work through.
-        // Ignored by models that do not think.
+        // Thinking models narrate before they answer and `format` does not constrain the
+        // narration. This is a four-field classification; ignored by models that do not think.
         think: this.think,
         options: {
           // Classification, not writing. The same report should sort the same

@@ -5,18 +5,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 /**
- * Every form on the plain fallback page has to reach a route.
- *
- * The plain pages post to `${base}/reports/<id>/<action>` where `base` is
- * `/admin/plain`, and the route patterns matched `/admin` and `/admin/api`
- * only. So every button on the fallback answered 404 — status, retriage and,
- * once it existed, delete. Nothing failed loudly: the page rendered, the form
- * submitted, and the browser showed a not-found.
- *
- * The fallback is what the inbox is when a dashboard build is broken, which is
- * exactly when nobody is in a position to notice a second thing being broken.
- * So this is a source check rather than a request: it reads the actions off the
- * page markup and asserts a pattern in the same file accepts each one.
+ * Every form on the plain fallback page has to reach a route: they posted to `/admin/plain/…`
+ * and the patterns matched `/admin` only, so every button answered 404 and nothing failed.
  */
 const SOURCE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "admin.ts"),
@@ -32,9 +22,8 @@ function formActions(): string[] {
 
 /** The route patterns, as live regexes. */
 function routes(): RegExp[] {
-  /* Non-greedy to the first `/);`, because the patterns themselves contain
-     brackets — `(?:...)` and the id group — so stopping at the first `)` finds
-     a fragment that compiles and matches nothing. */
+  /* Non-greedy to the first `/);`, because the patterns contain brackets — `(?:...)` and the
+     id group — so stopping at the first `)` finds a fragment that matches nothing. */
   return [...SOURCE.matchAll(/path\.match\((\/\^.*?\/)\);/g)].map((m) => {
     const body = m[1].slice(1, m[1].lastIndexOf("/"));
     return new RegExp(body);

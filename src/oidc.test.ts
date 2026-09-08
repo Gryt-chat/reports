@@ -17,11 +17,8 @@ import {
 } from "./oidc.ts";
 
 /**
- * A realm that is not Keycloak.
- *
- * Enough of one to answer discovery, hand back a signed id token and publish
- * the key it signed with — which is the whole of what this service asks a realm
- * to do. Running the real thing in a unit test would test Keycloak.
+ * A realm that is not Keycloak: enough to answer discovery, hand back a signed id token and
+ * publish the key it signed with. Running the real thing would test Keycloak.
  */
 let realm: http.Server;
 let issuer: string;

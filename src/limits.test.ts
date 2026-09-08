@@ -178,9 +178,8 @@ test("an expired ban is not a ban", () => {
 });
 
 test("a forwarded address is only believed when the proxy is the one asking", () => {
-  // The ingest port is published on the machine's network address, so the
-  // tunnel is not the only thing that can reach it. Anything else that can
-  // will send this header and opt out of every per-address limit and ban.
+  // The ingest port is published on the machine's network address, so the tunnel is not the
+  // only thing that can reach it. Anything else will send this header and opt out.
   const fromStranger = {
     socket: { remoteAddress: "192.0.2.50" },
     headers: { "cf-connecting-ip": "1.2.3.4" },

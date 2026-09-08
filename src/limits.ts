@@ -27,12 +27,8 @@ export interface LimitConfig {
 }
 
 /**
- * The ban covering this submitter, if there is one. Four kinds, weakest first:
- * an IP moves, an install id is stable until a reinstall, a key thumbprint
- * costs a new identity to shed, and an app id turns off a whole client.
- *
- * Returns rather than throws, because **a banned submitter is not told.** See
- * `ingest`.
+ * The ban covering this submitter, if there is one. Four kinds, weakest first: an IP moves,
+ * an install id survives until a reinstall, a thumbprint costs an identity, an app id is all.
  */
 export function banFor(who: Submitter, nowIso: string): BanRow | null {
   const targets: [Parameters<typeof findBan>[0], string | null][] = [
@@ -52,8 +48,7 @@ export function banFor(who: Submitter, nowIso: string): BanRow | null {
 }
 
 /**
- * Count an attempt that a ban swallowed — otherwise a ban is silent in both
- * directions, and the inbox cannot say whether it is still absorbing anything.
+ * Count an attempt that a ban swallowed — otherwise a ban is silent in both directions.
  * Pruned with the other rate events after a day, so it answers "recently".
  */
 export function recordBlocked(who: Submitter, ban: BanRow, now: number): void {
@@ -85,11 +80,8 @@ function bucketsFor(who: Submitter): string[] {
 function windows(who: Submitter, limits: LimitConfig): Window[] {
   const list: Window[] = [];
 
-  // First in the list, so a script in a loop trips this one rather than an
-  // hourly counter — the answer it gets back is ten seconds, which is true and
-  // is the one a person filing a second report can act on. Applied to every
-  // identifier rather than only the address, or rotating networks would shed
-  // it along with everything else.
+  // First in the list, so a script in a loop trips this rather than an hourly counter, and
+  // the answer is ten seconds. Applied to every identifier, or rotating networks sheds it.
   if (limits.minIntervalSec > 0) {
     const gap = limits.minIntervalSec * 1000;
     for (const bucket of bucketsFor(who)) {
@@ -123,10 +115,8 @@ function windows(who: Submitter, limits: LimitConfig): Window[] {
 }
 
 /**
- * Throw if any window is full.
- *
- * Counted in SQLite rather than in memory, so restarting the service is not a
- * way to clear your limit.
+ * Throw if any window is full. Counted in SQLite rather than in memory, so restarting the
+ * service is not a way to clear your limit.
  */
 export function assertWithinLimits(
   who: Submitter,
