@@ -1,42 +1,12 @@
 /* Hallmark · artifact: transactional email · genre: modern-minimal · tone: utilitarian
- * palette + geometry: @gryt/ui's shipped tokens, not an approximation of them
- * type: Atkinson Hyperlegible over a real system fallback
- * motion: none — email
- * pre-emit critique: P5 H5 E5 S5 R5 V4
- */
+ * palette and geometry: @gryt/ui's shipped tokens · motion: none · critique: P5 H5 E5 S5 R5 V4 */
 
 /**
- * The weekly digest.
- *
- * ## It is made of the same parts as the app
- *
- * `@gryt/ui` cannot be imported here — its components are React, its colours
- * are custom properties, and an email has neither. So this is the library's
- * spec written out by hand, taken from `createGrytTheme.ts` and the component
- * sources rather than matched by eye:
- *
- *   Surface   radius 20, 1px border, 16px padding
- *   Button    radius 999 — a pill, not a rounded rectangle
- *             accent background, `onAccent` #0c0a20 text, min-height 36
- *   Chip      bordered pill on surface-raised, small text
- *   Colour    light  bg #f1f2f7 · surface #fff · border #dadde6 · text #1f2129
- *             dark   bg #111318 · surface #1a1d24 · border #2b303d · text #e0e0e6
- *
- * **That list is the thing to check when the library moves.** An email that
- * says 8px where the app says 20px is a different product wearing the same
- * colours.
- *
- * The news first in a sentence, then the figures laid out the way the inbox
- * lays out reports, then what is still open. Bugs, feedback and their sum are
- * not three independent things, so they are not three equal columns.
- *
- * **Every element that carries a colour also carries a class.** The inline
- * value is what a client stripping the `<style>` block renders, and the class
- * is the only handle the dark-mode block has — one without the other renders
- * dark ink on a dark surface.
- *
- * The mark is a PNG attached by content id: Gmail and Outlook render neither
- * remote SVG nor, by default, remote images at all.
+ * The weekly digest, written out by hand from `createGrytTheme.ts` and the component sources,
+ * because `@gryt/ui` cannot be imported here. That is what to re-check when the library moves.
+
+ * Every element carrying a colour also carries a class: the inline value is what a client
+ * stripping `<style>` renders, and the class is the dark-mode block's only handle.
  */
 
 export interface Week {
@@ -68,12 +38,8 @@ const SUCCESS = "#4ade80";
 const WARNING = "#fbbf24";
 
 /**
- * The bar's hues, in the order apps appear.
- *
- * All four are `@gryt/ui`'s own semantic colours rather than a palette chosen
- * for this chart. They read as different at a glance and, more to the point,
- * they are the same four the app already uses — a chart in a private digest is
- * not worth a fifth colour nothing else in the product has.
+ * The bar's hues, in the order apps appear: `@gryt/ui`'s own semantic colours rather than a
+ * palette chosen for this chart. A private digest is not worth a fifth colour.
  */
 const SERIES = [ACCENT, SECONDARY, SUCCESS, WARNING];
 
@@ -85,11 +51,8 @@ const FONT =
   "'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 /**
- * What an app id is called when a person reads it.
- *
- * The wire values are lowercase and terse because they are keys. Anything not
- * on this list is shown as it came — a client this service has not heard of
- * should appear under its own name rather than as "Other".
+ * What an app id is called when a person reads it. Anything not on this list is shown as it
+ * came — a client this service has not heard of appears under its own name.
  */
 const APP_NAMES: Record<string, string> = {
   desktop: "Desktop app",
@@ -135,8 +98,7 @@ function esc(value: string): string {
 }
 
 /**
- * One figure, laid out the way the inbox lays out a report: the number in a
- * narrow left column, the label beside it. **Not a tile** — tiles imply the
+ * One figure, laid out the way the inbox lays out a report. Not a tile: tiles imply the
  * measurements are independent, and the row below adds them together.
  */
 function row(count: number, label: string, last: boolean): string {
@@ -150,12 +112,8 @@ function row(count: number, label: string, last: boolean): string {
 }
 
 /**
- * Where reports come from, as one bar. A proportion is the one thing a row of
- * figures is bad at, and table cells with percentage widths are the only chart
- * an email can draw.
- *
- * **Segments under 3% get 3% anyway.** A zero-width sliver is a segment that is
- * in the legend and not in the bar, which reads as a rendering fault.
+ * Where reports come from, as one bar — table cells with percentage widths are the only chart
+ * an email can draw. Segments under 3% get 3%, or they are in the legend and not the bar.
  */
 function bar(byApp: { app: string; count: number }[], total: number): string {
   if (total === 0 || byApp.length === 0) return "";

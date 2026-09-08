@@ -19,10 +19,8 @@ export class HttpError extends Error {
 }
 
 /**
- * Read a request body, refusing anything over `maxBytes`.
- *
- * The check is on bytes as they arrive rather than on Content-Length, because
- * Content-Length is whatever the sender says it is.
+ * Read a request body, refusing anything over `maxBytes`. The check is on bytes as they
+ * arrive rather than on Content-Length, which is whatever the sender says it is.
  */
 export async function readBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
   const chunks: Buffer[] = [];

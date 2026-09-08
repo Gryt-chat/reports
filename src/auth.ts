@@ -7,10 +7,8 @@ import { claimAssertion } from "./db.ts";
 import { HttpError } from "./http.ts";
 
 /**
- * The audience every report assertion has to name.
- *
- * A signature collected by something else — a Gryt server's join handshake,
- * say — must not be replayable here, and this is what stops it.
+ * The audience every report assertion has to name. A signature collected by something else —
+ * a Gryt server's join handshake — must not be replayable here.
  */
 export const REPORT_AUDIENCE = "gryt:reports";
 
@@ -18,29 +16,14 @@ export const REPORT_AUDIENCE = "gryt:reports";
 const MAX_ASSERTION_AGE = "5m";
 
 /**
- * How wrong a phone's clock may be.
- *
- * Without this, an `iat` one second in the future is refused outright, and a
- * handset thirty seconds fast is ordinary rather than suspicious. The cost of
- * being strict is not a rejected signature — the client sends the assertion
- * whenever it can build one, so a refusal loses the whole report, from exactly
- * the person who was trying to say something is broken.
- *
- * A minute either way buys nothing for anyone attacking this: the assertion is
- * still bound to one body and its `jti` is still good once.
+ * How wrong a phone's clock may be. Refusing costs the whole report, from the person trying
+ * to say something is broken; a minute buys an attacker nothing, since `jti` is good once.
  */
 const CLOCK_TOLERANCE = "60s";
 
 /**
- * Which app is submitting, and whether it proved it.
- *
- * The key is a shared secret shipped inside a client binary, which is friction
- * rather than authentication: anyone can pull it out of an app bundle or read
- * one request in a proxy. What it buys is that a scanner finding an open POST
- * endpoint cannot fill the table overnight, and that a leaked key can be
- * rotated for one app without shipping the others.
- *
- * The thing that actually authenticates is the signature below.
+ * Which app is submitting, and whether it proved it. The key is friction rather than
+ * authentication; what actually authenticates is the signature below.
  */
 export function checkAppKey(
   appId: string | null,
@@ -59,9 +42,8 @@ export function checkAppKey(
 
   if (allowUnkeyed && keys.size === 0) return appId;
 
-  // One answer for "no such app" and "wrong key", because two answers tell a
-  // stranger which app ids exist. Whoever is holding a real key knows which
-  // one it is; nobody else needs to learn the list by asking.
+  // One answer for "no such app" and "wrong key", because two answers tell a stranger which
+  // app ids exist. Whoever holds a real key knows which one it is.
   const expected = keys.get(appId);
   if (!expected || !appKey || !constantTimeEquals(appKey, expected)) {
     throw new HttpError(401, "bad_app_key", "X-Gryt-App-Key is wrong or missing");
@@ -83,16 +65,8 @@ export interface VerifiedIdentity {
 }
 
 /**
- * Verify that whoever posted this holds a Gryt identity key. It ties repeat
- * submissions together without collecting anything about the person, and lets
- * an abuser be banned by key rather than by whatever IP they were on.
- *
- * **No challenge round trip, so three things prevent replay together:** the
- * assertion is bound to this exact body through `bh`, it expires in five
- * minutes, and its `jti` is good exactly once.
- *
- * The identifier stored is the key's thumbprint, not a server's derived
- * subject — this service authorises nothing on any server.
+ * Verify that whoever posted this holds a Gryt identity key. No challenge round trip, so
+ * three things stop replay together: `bh` binds the body, five minutes, and `jti` once.
  */
 export async function verifyIdentity(
   token: string,
@@ -110,10 +84,8 @@ export async function verifyIdentity(
       requiredClaims: ["sub", "jti", "iat", "exp"],
     }));
   } catch (err) {
-    // The library's own message describes how the check works — which expiry
-    // was missed, which claim was wrong — to somebody who has not proved
-    // anything. It goes in the log, where it helps; the answer says the one
-    // thing the caller is entitled to.
+    // The library's own message describes how the check works to somebody who has proved
+    // nothing. It goes in the log; the answer says what the caller is entitled to.
     consola.debug(`[auth] Assertion rejected: ${(err as Error).message}`);
     throw new HttpError(401, "bad_signature", "Identity assertion did not verify");
   }
