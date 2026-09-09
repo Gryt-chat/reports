@@ -1,9 +1,6 @@
 /**
- * The service's own JSON routes, typed.
- *
- * Nothing here carries a token. The dashboard is served from the same origin as
- * the API, so the session cookie set at sign-in is simply sent; there is no
- * credential in JavaScript and nowhere for one to leak from.
+ * The service's own JSON routes, typed. Nothing here carries a token: the dashboard is served
+ * from the same origin, so the session cookie is simply sent.
  */
 
 export type ReportType = "bug" | "feedback";

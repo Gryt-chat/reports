@@ -4,12 +4,8 @@ import type { ServerResponse } from "node:http";
 import { extname, join, normalize, resolve, sep } from "node:path";
 
 /**
- * The dashboard: a built Vite app, served by the service that owns the data.
- * Same origin on purpose — the session cookie is simply sent, so there is no
- * token in JavaScript, no CORS and no second place to check the allowlist.
- *
- * **If it was never built, everything here is inert and the plain pages
- * answer**, so a broken frontend build cannot take the inbox down with it.
+ * The dashboard: a built Vite app, served by the service that owns the data. Same origin, so
+ * no token in JavaScript. If it was never built, everything here is inert.
  */
 
 const TYPES: Record<string, string> = {
@@ -28,19 +24,15 @@ const TYPES: Record<string, string> = {
 };
 
 /**
- * Everything the page is allowed to do.
- *
- * Wider than the plain pages', because this one runs its own JavaScript — but
- * only its own: no CDN, no inline script, no framing, and nothing it can talk
- * to except the origin it came from.
+ * Everything the page is allowed to do. Wider than the plain pages', because this one runs
+ * its own JavaScript — and only its own: no CDN, no inline script, no framing.
  */
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  // data: as well as 'self', because @gryt/ui's compiled CSS embeds a face as a
-  // data URI. Without it the library's own icon font is blocked and the console
-  // fills with CSP violations — found by opening the page, not by reading it.
+  // data: as well as 'self', because @gryt/ui's compiled CSS embeds a face as a data URI.
+  // Without it the icon font is blocked — found by opening the page, not by reading it.
   "font-src 'self' data:",
   "img-src 'self' data:",
   "connect-src 'self'",
@@ -68,11 +60,8 @@ export class Dashboard {
   }
 
   /**
-   * Serve an asset by path, or return false if there is nothing there.
-   *
-   * The path is resolved and then checked to still be inside the root, which is
-   * the only thing standing between `/admin/assets/../../etc/passwd` and the
-   * file it names.
+   * Serve an asset by path, or return false if there is nothing there. The path is resolved
+   * and then checked to still be inside the root, which is the whole guard.
    */
   asset(res: ServerResponse, pathname: string): boolean {
     if (!this.root) return false;
@@ -91,13 +80,8 @@ export class Dashboard {
     res.writeHead(200, {
       "content-type": type,
       "content-length": stat.size,
-      // **`private`, not `public`.** These sit behind the session, and `public`
-      // invites every shared cache to keep a copy and hand it to whoever asks
-      // next — Cloudflare did exactly that, and the origin refusing the request
-      // made no difference to anybody who never reached it.
-      //
-      // index.html is not hashed and must never be stored at all, or a deploy
-      // leaves people on a shell pointing at assets that no longer exist.
+      // `private`, not `public`: these sit behind the session, and Cloudflare kept a copy
+      // and served it. index.html is not hashed and must never be stored at all.
       "cache-control": file.endsWith("index.html")
         ? "no-store"
         : "private, max-age=31536000, immutable",

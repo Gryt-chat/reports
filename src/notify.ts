@@ -4,12 +4,8 @@ import type { Config } from "./config.ts";
 import { setNotified, type ReportRow } from "./db.ts";
 
 /**
- * Post a new report to Discord.
- *
- * An inbox nobody opens is the same as no inbox, and this is the cheapest way
- * to make a report arrive somewhere Sivert already is. Optional: with no
- * webhook configured the service is quiet and the admin page is the only way
- * in.
+ * Post a new report to Discord: an inbox nobody opens is the same as no inbox. Optional —
+ * with no webhook the service is quiet and the admin page is the only way in.
  */
 export async function notify(config: Config, report: ReportRow): Promise<void> {
   if (!config.discordWebhookUrl) return;

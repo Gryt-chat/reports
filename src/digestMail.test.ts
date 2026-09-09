@@ -28,9 +28,8 @@ test("and both when they do not", () => {
 });
 
 test("the digest says what arrived and nothing about last week", () => {
-  // It used to carry the change since the previous week under each count. A
-  // quieter week then read as a loss of something, which is not what a smaller
-  // number of people writing in is.
+  // It used to carry the change since the previous week under each count. A quieter week
+  // then read as a loss of something, which is not what fewer people writing in is.
   const out = render(week({ bug: 3, feedback: 2 }), null);
   for (const part of [out.html, out.text, out.subject]) {
     assert.doesNotMatch(part, /last week/i);
@@ -100,9 +99,8 @@ test("every colour is stated, because a client that strips the style block still
 });
 
 test("the geometry is @gryt/ui's, not an approximation of it", () => {
-  // The library's Button is radius-full and its Surface is radius-lg. An email
-  // with a rounded rectangle where the app has a pill is a different product
-  // wearing the same colours.
+  // The library's Button is radius-full and its Surface is radius-lg. An email with a
+  // rounded rectangle where the app has a pill is a different product in the same colours.
   const html = render(week(), "https://reports.gryt.chat").html;
   assert.match(html, /border-radius:999px/); // the button, a pill
   assert.match(html, /border-radius:20px/); // the surface

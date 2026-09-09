@@ -1,14 +1,8 @@
 import type { Payload } from "../lib/api";
 
 /**
- * What the app sent, laid out rather than dumped.
- *
- * The plain pages print the whole blob as JSON, which is honest and unreadable.
- * The value of these fields is that you can see three of them at a glance —
- * version, OS, what they were doing — so they get a grid and a label each.
- *
- * Anything the app sends that this does not know about is not hidden: it falls
- * through to the JSON at the bottom of the report, which is still there.
+ * What the app sent, laid out rather than dumped: three of these at a glance is the value,
+ * so each gets a label. Anything unknown falls through to the JSON at the bottom.
  */
 
 const LABELS: Record<string, string> = {

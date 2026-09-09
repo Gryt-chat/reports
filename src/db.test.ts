@@ -164,9 +164,8 @@ test("a stranger with a Gryt account is still a stranger", () => {
 });
 
 test("an email on somebody else's pinned entry does not let them in", () => {
-  // Once an entry is pinned to a user id, the email that seeded it stops being
-  // a way in — otherwise anyone who could set that address on their own
-  // account would inherit the access.
+  // Once an entry is pinned to a user id, the email that seeded it stops being a way in —
+  // otherwise anyone who could set that address on their own account would inherit access.
   assert.equal(findAdmin("kc-user-3", "impostor", "partner@example.com"), null);
 });
 

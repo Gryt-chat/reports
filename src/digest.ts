@@ -17,16 +17,8 @@ import {
 import { MARK_CID, render, type Week } from "./digestMail.ts";
 
 /**
- * A weekly note saying what arrived.
- *
- * Nothing else tells anybody a report exists. The inbox is a page somebody has
- * to remember to open, and an inbox nobody is reminded of is one nobody reads —
- * which is the same failure as not having taken the report in the first place.
- *
- * **A quiet week still sends.** Zero is information: it says the apps are quiet
- * and the service is alive. Skipping the send would make "nothing arrived" and
- * "the digest is broken" look identical from the outside, and the second one
- * would go unnoticed for a month.
+ * A weekly note saying what arrived, because nothing else tells anybody a report exists. A
+ * quiet week still sends: otherwise "nothing arrived" and "the digest is broken" look alike.
  */
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -38,15 +30,8 @@ function totalsByTypeNamed(): { totalBug: number; totalFeedback: number } {
 }
 
 /**
- * The app icon, attached rather than linked.
- *
- * Gmail and Outlook render neither a remote SVG nor, by default, a remote
- * image at all — a linked mark is a broken box in the two clients most of
- * this will be opened in. Attached by content id, it is part of the message
- * and always renders. 4 KB.
- *
- * Read once at startup: a file that has gone missing should say so when the
- * service starts, not silently drop the mark from a Monday morning.
+ * The app icon, attached rather than linked: Gmail and Outlook render neither a remote SVG
+ * nor, by default, a remote image. Read once at startup, so a missing file says so then.
  */
 export function markPng(): Buffer | null {
   try {
@@ -78,15 +63,8 @@ export function weekFor(now: Date): Week {
 }
 
 /**
- * Whether this is the moment.
- *
- * Two conditions, and the second is the one that matters: the configured hour
- * has come round, and nothing has gone out in the last six days. Without the
- * second, a restart on the right morning sends a second copy, and a service
- * that restarts a few times sends a few.
- *
- * Six rather than seven so a send that ran a little late one week does not
- * push the next one a whole week out.
+ * Whether this is the moment: the configured hour has come round, and nothing has gone out
+ * in six days. Without the second, a restart on the right morning sends a second copy.
  */
 export function isDue(config: Config, now: Date, last: string | null): boolean {
   if (!config.digest.enabled) return false;
@@ -129,9 +107,8 @@ export class Digest {
     consola.info(`[digest] On, ${days[day]}s from ${String(hour).padStart(2, "0")}:00`);
     if (!MARK) consola.warn("[digest] assets/gryt-mark.png is missing — mail will have no mark.");
 
-    // Every fifteen minutes. The check is three integer comparisons and one
-    // indexed row, so the cost is nothing and it does not matter which quarter
-    // hour the service happened to start on.
+    // Every fifteen minutes. The check is three integer comparisons and one indexed row, so
+    // it does not matter which quarter hour the service happened to start on.
     this.timer = setInterval(() => void this.tick(), 15 * 60 * 1000);
     this.timer.unref();
     void this.tick();
@@ -173,9 +150,8 @@ export class Digest {
 
     for (const person of people) {
       try {
-        // One message each rather than one with everybody in it. The
-        // allowlist is a list of people who can read the inbox, not a list
-        // they have agreed to be shown to each other.
+        // One message each rather than one with everybody in it. The allowlist is a list of
+        // people who can read the inbox, not a list they agreed to be shown to each other.
         await this.transport?.sendMail({
           from: { name: smtp.fromName, address: smtp.from },
           to: person.email,
@@ -200,15 +176,8 @@ export class Digest {
 }
 
 /**
- * A week that never happened, for looking at the design.
- *
- * The preview used to render the live database, which on a service with
- * twenty-seven test rows in it shows a design decision — how a four-figure
- * number sits next to a label, whether the bar copes with a long tail — as
- * whatever this week's data happens to be. Fixed numbers make the preview a
- * preview of the template rather than of the data.
- *
- * `?live=1` on the preview route still renders the real thing.
+ * A week that never happened, for looking at the design: fixed numbers make this a preview of
+ * the template rather than of the data. `?live=1` still renders the real thing.
  */
 export function sampleWeek(now = new Date()): Week {
   return {

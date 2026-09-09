@@ -10,12 +10,8 @@ interface QueueRowProps {
 }
 
 /**
- * One report in the queue.
- *
- * Three lines, in the order a person triaging actually reads them: what it is,
- * what it says, and where it came from. The type and the priority are chips
- * because they are the two things worth spotting without reading; the status
- * only appears once it stops being `new`, so an untouched queue is quiet.
+ * One report in the queue: what it is, what it says, where it came from. The status only
+ * appears once it stops being `new`, so an untouched queue is quiet.
  */
 export function QueueRow({ report, selected }: QueueRowProps) {
   const location = useLocation();

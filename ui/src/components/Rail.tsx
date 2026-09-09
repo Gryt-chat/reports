@@ -5,15 +5,8 @@ import type { ReportSummary, Stats } from "../lib/api";
 import { QueueRow } from "./QueueRow";
 
 /**
- * The named views, in the order somebody actually works through them.
- *
- * Open first because that is the job. None of these carry a shelf: whether
- * settled reports are included is the toggle below, so it survives moving
- * between views instead of being a property of one of them.
- *
- * "Everything" used to mean `shelf=all`, which made the one view broad enough
- * to browse also the only view showing work already done — and with every
- * report settled it was the only view with anything in it at all.
+ * The named views, in the order somebody works through them. None carries a shelf: whether
+ * settled reports are included is the toggle, so it survives moving between views.
  */
 const VIEWS: { label: string; params: string }[] = [
   { label: "Open", params: "" },

@@ -6,15 +6,8 @@ import { HttpError } from "./http.ts";
 import { type TriageModel } from "./models.ts";
 
 /**
- * Turning a report into a task on the board.
- *
- * Reading a report and deciding it is real is one step. Writing it up is
- * another, and the second is where reports stop — so the model that already
- * read the report drafts the task, and a person edits and files it.
- *
- * **The model drafts; it does not file.** Nothing here creates anything until
- * `createTask` is called with a body somebody has seen. A model writing
- * straight to the board would put its mistakes somewhere that outlives them.
+ * Turning a report into a task on the board. The model drafts and does not file: nothing here
+ * creates anything until `createTask` is called with a body somebody has seen.
  */
 
 export interface TaskDraft {
@@ -94,11 +87,8 @@ export async function draftTask(
 }
 
 /**
- * File a task, and say where the report came from.
- *
- * The report id goes in the description rather than being left to memory: a
- * task nobody can trace back to what prompted it is a task somebody rewrites
- * from scratch six weeks later.
+ * File a task, and say where the report came from. The report id goes in the description: a
+ * task nobody can trace back is one somebody rewrites from scratch six weeks later.
  */
 export async function createTask(
   report: ReportRow,

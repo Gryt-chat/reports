@@ -144,14 +144,8 @@ test("signature: an assertion made for something else does not work here", async
 });
 
 /**
- * The assertion the mobile app actually builds.
- *
- * Written out here rather than reusing the helper above, on purpose: this is a
- * contract with another repository, and the point is to fail when either side
- * drifts. Every value below mirrors `src/feedback/claims.ts` and
- * `src/identity/keys.ts` in Gryt-chat/mobile — the bare thumbprint as `sub`
- * (not the `key:`-prefixed subject that file also exports), the canonical
- * member order, and the 120-second lifetime.
+ * The assertion the mobile app actually builds, written out rather than reusing the helper:
+ * this is a contract with another repository, and it should fail when either side drifts.
  */
 async function mobileShapedAssertion(
   signer: Signer,
@@ -191,9 +185,8 @@ test("a phone with a slightly fast clock is not a stranger", async () => {
   const body = Buffer.from("{}");
   const now = Math.floor(Date.now() / 1000);
 
-  // Thirty seconds ahead is an ordinary handset, and this used to be a 401.
-  // The client sends the assertion whenever it can build one, so refusing it
-  // loses the whole report rather than only the signature.
+  // Thirty seconds ahead is an ordinary handset, and this used to be a 401. The client sends
+  // the assertion whenever it can, so refusing it loses the whole report.
   await verifyIdentity(await mobileShapedAssertion(signer, body, now + 30), body);
 
   // Far enough out that the assertion's own two minutes have expired.

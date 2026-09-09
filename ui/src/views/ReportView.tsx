@@ -96,11 +96,8 @@ export function ReportView({ report, onChanged, onDeleted }: ReportViewProps) {
   }
 
   /**
-   * Deciding is optimistic and silent.
-   *
-   * The queue updates the moment the button is pressed and nothing announces
-   * it — a toast for something you just did yourself is noise. A failure is the
-   * only thing worth interrupting for, and that is what the Alert is.
+   * Deciding is optimistic and silent: a toast for something you just did yourself is noise.
+   * A failure is the only thing worth interrupting for, and that is the Alert.
    */
   async function decide(status: ReportStatus) {
     setBusy(status);
@@ -304,12 +301,8 @@ export function ReportView({ report, onChanged, onDeleted }: ReportViewProps) {
 }
 
 /**
- * The drafted task, before it is anything.
- *
- * Editable, because the model is drafting from one person's description of
- * something going wrong and will sometimes read it the wrong way round. A
- * draft nobody can correct is one that gets filed wrong or thrown away, and
- * both cost more than the draft saved.
+ * The drafted task, before it is anything. Editable, because the model is drafting from one
+ * person's description and will sometimes read it the wrong way round.
  */
 function TaskDraftPanel({
   draft,

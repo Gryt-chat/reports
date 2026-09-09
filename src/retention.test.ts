@@ -72,10 +72,8 @@ function config(identifierDays: number): Config {
   return { retention: { identifierDays } } as unknown as Config;
 }
 
-/* Every test in this file shares one database, so a count assertion is only
-   about this test's row if whatever the last one left behind is already
-   scrubbed. Clearing the decks first is what makes these independent of the
-   order they run in. */
+/* Every test in this file shares one database, so a count assertion is only about this
+   test's row if the last one's is already scrubbed. */
 function clearDecks(): void {
   scrubOldIdentifiers(config(2), NOW);
 }
@@ -104,9 +102,8 @@ test("keeps what the report is for", () => {
   assert.equal(row?.device_model, "iPhone17,1");
 });
 
-/* Neither says who or where. The install id is meaningless outside this
-   database and is what shows two reports came from the same copy of the app;
-   the user-agent is the app version and the OS, which the row already has. */
+/* Neither says who or where. The install id is meaningless outside this database, and the
+   user-agent is the app version and the OS, which the row already has. */
 test("keeps the install id and the user-agent", () => {
   const id = stored(400);
   scrubOldIdentifiers(config(2), NOW);
@@ -124,9 +121,8 @@ test("leaves a report inside the window alone", () => {
   assert.equal(getReport(id)?.ip, "203.0.113.7");
 });
 
-/* The whole reason the columns are kept at all. Two days has to leave the
-   auto-ban's own window — a day — intact, or the scrub has broken the only
-   thing that reads them. */
+/* The whole reason the columns are kept at all. Two days has to leave the auto-ban's own
+   window — a day — intact, or the scrub breaks the only thing that reads them. */
 test("the noise auto-ban still fires inside the window", () => {
   clearDecks();
   const ids = [stored(0, "noise"), stored(0, "noise"), stored(0, "noise")];
@@ -155,10 +151,8 @@ test("zero days keeps everything, which is what it did before", () => {
   assert.equal(getReport(id)?.ip, "203.0.113.7");
 });
 
-/* The column is TEXT holding an ISO timestamp, so the comparison is a string
-   comparison. It only orders correctly because every value is the same shape
-   and the same zone — a receivedAt written any other way would sort wrong and
-   scrub the wrong rows. */
+/* The column is TEXT holding an ISO timestamp, so the comparison is a string comparison. It
+   only orders correctly because every value is the same shape and the same zone. */
 test("compares timestamps as ISO strings", () => {
   const id = stored(3); // 2026-08-31T12:00Z
 

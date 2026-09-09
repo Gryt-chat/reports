@@ -5,12 +5,8 @@ import { after, before, test } from "node:test";
 import { modelFor, type ModelConfig } from "./models.ts";
 
 /**
- * An Ollama that is not Ollama.
- *
- * Enough of one to record what the service asked it for and answer with
- * whatever the test wants back. The point is the wire format: if `format` does
- * not arrive as the schema, the real one is free to answer with prose, and the
- * first anybody would know is a triage error on a live report.
+ * An Ollama that is not Ollama, enough to record what was asked and answer with whatever the
+ * test wants. The point is the wire format: without `format`, the real one may answer prose.
  */
 let ollama: http.Server;
 let url: string;
@@ -50,9 +46,8 @@ before(async () => {
           return;
         }
 
-        // Ollama streams one JSON object per line. Splitting the answer across
-        // frames is the point — a reader that assumes one frame works against
-        // a fast model and fails against a slow one.
+        // Ollama streams one JSON object per line. Splitting the answer across frames is the
+        // point: a reader that assumes one frame works on a fast model and fails on a slow one.
         const content = (reply.body as { message?: { content?: string } }).message?.content ?? "";
         res.writeHead(200, { "content-type": "application/x-ndjson" });
         for (const piece of content.match(/[\s\S]{1,7}/g) ?? []) {

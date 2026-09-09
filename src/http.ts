@@ -19,10 +19,8 @@ export class HttpError extends Error {
 }
 
 /**
- * Read a request body, refusing anything over `maxBytes`.
- *
- * The check is on bytes as they arrive rather than on Content-Length, because
- * Content-Length is whatever the sender says it is.
+ * Read a request body, refusing anything over `maxBytes`. The check is on bytes as they
+ * arrive rather than on Content-Length, which is whatever the sender says it is.
  */
 export async function readBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -64,9 +62,8 @@ export function sendHtml(
   status: number,
   html: string,
   /**
-   * A looser policy for the digest preview, which has an inline image and a
-   * webfont. **Passed in per response rather than widened here** — the inbox
-   * renders text strangers wrote.
+   * A looser policy for the digest preview, which has an inline image and a webfont. Passed
+   * in per response rather than widened here — the inbox renders text strangers wrote.
    */
   csp = "default-src 'none'; style-src 'unsafe-inline'",
 ): void {
@@ -83,18 +80,8 @@ export function sendHtml(
 }
 
 /**
- * Who sent this. Behind the tunnel the socket address is the proxy, and **a
- * header is only worth reading when something in front is known to set it**,
- * hence REPORTS_TRUST_PROXY. `cf-connecting-ip` is the one Cloudflare sets and
- * strips; the rightmost `x-forwarded-for` entry is the only one the nearest
- * proxy can vouch for.
- *
- * `trustedProxies` is what decides whether to believe any of it. The ingest
- * port is published on the machine's network address, so the tunnel is not the
- * only thing that can reach it — and anything else that can will happily send
- * `cf-connecting-ip: 1.2.3.4` and opt itself out of every per-address rate
- * limit and every ban. Listing the proxy means the header is only believed when
- * the proxy is the one that connected.
+ * Who sent this. A header is only worth reading when something in front is known to set it,
+ * hence REPORTS_TRUST_PROXY: anything else that can reach the port will forge one.
  */
 export function clientIp(
   req: IncomingMessage,
@@ -107,10 +94,8 @@ export function clientIp(
     trustedProxies.length === 0 || trustedProxies.includes(normaliseIp(peer));
 
   if (trustProxy && fromProxy) {
-    // Nothing else can see this. Working out which address to pin means either
-    // reading it off the machine at the moment a request is in flight, or
-    // guessing — and a wrong guess here is silent, because believing nobody
-    // looks exactly like believing everybody until somebody lies.
+    // Nothing else can see this. A wrong guess is silent, because believing nobody looks
+    // exactly like believing everybody until somebody lies.
     if (trustedProxies.length === 0 && onUnpinnedProxy && hasForwardingHeader(req)) {
       onUnpinnedProxy(normaliseIp(peer));
     }
@@ -149,16 +134,8 @@ export function header(req: IncomingMessage, name: string): string | null {
 }
 
 /**
- * Whether a browser origin may post reports. **One function, because the CORS
- * header and the store decision have to answer the same way** — two copies of
- * the condition drift once and then refuse a real client.
- *
- * **Loopback is always allowed.** The desktop client serves its own UI from a
- * local HTTP server on a port the OS may reassign, so no list can name it.
- *
- * It costs nothing: `Origin` is set by the browser from the page's real origin
- * and cannot be forged, so a site on the open web can never claim to be
- * loopback. What it describes is software already on the reporter's machine.
+ * Whether a browser origin may post reports. One function, because the CORS header and the
+ * store decision have to answer the same way. Loopback is always allowed and cannot be forged.
  */
 export function isAllowedOrigin(origin: string, allowed: string[]): boolean {
   if (allowed.includes("*") || allowed.includes(origin)) return true;

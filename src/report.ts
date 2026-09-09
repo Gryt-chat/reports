@@ -1,13 +1,8 @@
 import { HttpError } from "./http.ts";
 
 /**
- * What a report is, and what a client is expected to fill in. **Only `type` and
- * `message` are required, and a bad field is truncated or dropped rather than
- * rejected** — a report lost to a validation error is a bug nobody hears about.
- *
- * The whole normalised object is stored alongside the columns, so a field an
- * app sends before this service knows about it still lands in `extra` and is
- * still there to read.
+ * What a report is. Only `type` and `message` are required, and a bad field is truncated or
+ * dropped rather than rejected: a report lost to validation is a bug nobody hears about.
  */
 export interface NormalisedReport {
   type: "bug" | "feedback";
@@ -125,9 +120,8 @@ function section(raw: unknown, key: string): Record<string, unknown> {
 }
 
 /**
- * Permissions come in as whatever the platform calls them — `granted`,
- * `denied`, `undetermined`, or a bare boolean on the web. Normalising to
- * strings keeps the shape stable without pretending the platforms agree.
+ * Permissions come in as whatever the platform calls them — `granted`, `denied`,
+ * `undetermined`, or a bare boolean. Strings keep the shape stable without pretending.
  */
 function permissions(raw: unknown): Record<string, string> | null {
   if (!isObject(raw)) return null;

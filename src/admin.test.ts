@@ -19,9 +19,8 @@ function attributes(header: string) {
 }
 
 test("signing out clears every cookie that can hold a session", () => {
-  // Both the Keycloak session cookie and the static token cookie authorise on
-  // their own. Clearing one and not the other leaves the inbox open, which is
-  // what GRYT-539 was.
+  // Both the Keycloak session cookie and the static token cookie authorise on their own.
+  // Clearing one and not the other leaves the inbox open, which is what GRYT-539 was.
   const names = signOutCookies(false).map((header) => attributes(header).name);
   assert.deepEqual(names.sort(), Object.keys(SET_WITH).sort());
 });

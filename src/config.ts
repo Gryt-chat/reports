@@ -1,12 +1,8 @@
 import consola from "consola";
 
 /**
- * Everything this service reads from the environment, resolved once at boot.
- *
- * Defaults are the ones that make sense for the deployment behind
- * reports.gryt.chat, not the ones that make a first run easy — an open POST
- * endpoint with no key and no limits is the failure mode this whole service is
- * trying to avoid, so it has to be asked for explicitly.
+ * Everything this service reads from the environment, resolved once at boot. The defaults
+ * suit the real deployment, not a first run: an open POST endpoint is the failure mode.
  */
 export interface Config {
   host: string;
@@ -35,13 +31,8 @@ export interface Config {
   /** Reports allowed per window, counted separately per bucket. */
   limits: {
     /**
-     * The shortest gap between one client's reports.
-     *
-     * The cheapest thing here and the one that does the most: a script posting
-     * in a loop is stopped by the first pair of requests, before any of the
-     * hourly counters have noticed. Short enough that somebody filing a second
-     * genuine report is not really inconvenienced, and unlike the counters
-     * below it answers honestly — see `assertWithinLimits`.
+     * The shortest gap between one client's reports. The cheapest thing here and the one
+     * that does the most, and unlike the counters below it answers honestly.
      */
     minIntervalSec: number;
     perMinute: number;
@@ -51,14 +42,8 @@ export interface Config {
   };
 
   /**
-   * Banning whoever keeps sending junk, decided by the triage pass.
-   *
-   * **Only the `noise` verdict counts.** `not_a_bug` means a feature request or
-   * a support question, and somebody who sends three of those is the most
-   * engaged user Gryt has.
-   *
-   * **The ban expires.** A permanent one taken out by a model on three strikes
-   * is a decision nobody reviews, and its failure is invisible.
+   * Banning whoever keeps sending junk, decided by triage. Only the `noise` verdict counts,
+   * and the ban expires: a permanent one taken out by a model is a decision nobody reviews.
    */
   autoBan: {
     /** Noise reports before a ban. 0 turns this off. */
@@ -70,10 +55,8 @@ export interface Config {
   };
 
   /**
-   * How long a report keeps the address and identity thumbprint that say who
-   * sent it.
-   *
-   * 0 keeps them forever, which is what this did before there was a setting.
+   * How long a report keeps the address and identity thumbprint that say who sent it. 0
+   * keeps them forever, which is what this did before there was a setting.
    */
   retention: {
     identifierDays: number;
@@ -81,10 +64,8 @@ export interface Config {
 
   trustProxy: boolean;
   /**
-   * The addresses whose forwarding headers are believed.
-   *
-   * Empty means believe any peer, which is only right when nothing but the
-   * proxy can reach the port.
+   * The addresses whose forwarding headers are believed. Empty means believe any peer, which
+   * is only right when nothing but the proxy can reach the port.
    */
   trustedProxies: string[];
 
@@ -107,11 +88,8 @@ export interface Config {
   };
 
   /**
-   * The board a report can be filed onto. Both the credential and the address
-   * live here rather than in the repository — **a default would file tasks onto
-   * whoever's board was compiled in.**
-   *
-   * Without both, the Create task button is not offered.
+   * The board a report can be filed onto. Both the credential and the address live here, or
+   * a default would file tasks onto whoever's board was compiled in.
    */
   vikunja: {
     url: string | null;
@@ -120,9 +98,8 @@ export interface Config {
   };
 
   /**
-   * The weekly digest. `GRYT_SMTP_*` rather than a set of its own, since the
-   * box already has those and a second copy is a second thing to rotate.
-   * Without a host the digest does not run and the service starts as normal.
+   * The weekly digest, on `GRYT_SMTP_*` rather than a set of its own. Without a host the
+   * digest does not run and the service starts as normal.
    */
   digest: {
     enabled: boolean;
@@ -173,11 +150,8 @@ function list(name: string): string[] {
 }
 
 /**
- * `REPORTS_APP_KEYS=mobile:key1,desktop:key2`.
- *
- * One key per app rather than one key for everything, because the point of the
- * header is to be revocable: a key pulled out of the iOS bundle should not
- * force a desktop release too.
+ * `REPORTS_APP_KEYS=mobile:key1,desktop:key2`. One key per app, because the point of the
+ * header is to be revocable: a key pulled out of the iOS bundle should not force a release.
  */
 function parseAppKeys(raw: string): Map<string, string> {
   const keys = new Map<string, string>();
@@ -215,9 +189,8 @@ export function loadConfig(): Config {
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
   const ollamaUrl = process.env.REPORTS_OLLAMA_URL?.trim() || "";
 
-  // A URL is the only thing Ollama needs, so having one is what picks it. The
-  // API needs a key, so having one picks that. Naming the provider outright
-  // wins over both, which is how you point them at the same report to compare.
+  // A URL is the only thing Ollama needs, so having one picks it; the API needs a key. Naming
+  // the provider outright wins over both, which is how you point them at one report.
   const provider: Config["triage"]["provider"] =
     (process.env.REPORTS_TRIAGE_PROVIDER?.trim() as Config["triage"]["provider"]) ||
     (ollamaUrl ? "ollama" : "anthropic");
@@ -274,10 +247,8 @@ export function loadConfig(): Config {
     },
 
     retention: {
-      /* Two days, because the only thing that reads these is the noise auto-ban
-         and its window is autoBan.windowHours — a day by default. A ban it
-         issues copies the value into `bans` with its own expiry, so nothing
-         needs the report's copy afterwards. */
+      /* Two days, because the only thing that reads these is the noise auto-ban and its
+         window is a day. A ban copies the value into `bans` with its own expiry. */
       identifierDays: int("REPORTS_RETAIN_IDENTIFIER_DAYS", 2, 0, 3650),
     },
 
@@ -293,9 +264,8 @@ export function loadConfig(): Config {
       ollamaUrl: ollamaUrl || "http://127.0.0.1:11434",
       keepAlive: process.env.REPORTS_OLLAMA_KEEP_ALIVE?.trim() || "5m",
       timeoutMs: int("REPORTS_TRIAGE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-      // Off, because sorting a report into four fields is not a problem to
-      // reason through, and on a model running half in RAM the reasoning is
-      // most of the wall clock. Turn it on to trade minutes for judgement.
+      // Off, because sorting a report into four fields is not a problem to reason through,
+      // and on a model running half in RAM the reasoning is most of the wall clock.
       think: bool("REPORTS_TRIAGE_THINK", false),
       pollMs: int("REPORTS_TRIAGE_POLL_MS", 15_000, 1000, 3_600_000),
       batch: int("REPORTS_TRIAGE_BATCH", 5, 1, 50),

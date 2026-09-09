@@ -93,9 +93,8 @@ test("two is not enough", () => {
 });
 
 test("not_a_bug never counts, however many arrive", () => {
-  // A feature request and a support question both land here. Somebody who
-  // sends five is the most engaged person using Gryt, and banning them is the
-  // opposite of what this inbox is for.
+  // A feature request and a support question both land here. Somebody who sends five is the
+  // most engaged person using Gryt, and banning them is the opposite of the point.
   const ip = "198.51.100.12";
   let last = stored("not_a_bug", { ip });
   for (let i = 0; i < 4; i++) last = stored("not_a_bug", { ip });

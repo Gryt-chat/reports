@@ -6,16 +6,8 @@ import type { Config } from "./config.ts";
 import { HttpError } from "./http.ts";
 
 /**
- * Signing in to the inbox with a Gryt account, rather than a shared token —
- * there is one of that, everyone who has had it still has it, and rotating it
- * logs out the tooling too.
- *
- * **Keycloak says who somebody is, not whether they may read the inbox.** That
- * list is in this service's own database: it is two or three people, and the
- * realm would mean opening the Keycloak admin console to add one.
- *
- * The static token stays for programmatic access. A person gets a session; a
- * script gets a bearer token, and neither has to pretend to be the other.
+ * Signing in to the inbox with a Gryt account rather than a shared token. Keycloak says who
+ * somebody is, not whether they may read the inbox: that list is this service's own.
  */
 
 export interface OidcConfig {
@@ -24,11 +16,8 @@ export interface OidcConfig {
   clientSecret: string;
   redirectUri: string;
   /**
-   * Who gets in the first time, before there is anybody to add anybody.
-   *
-   * A username or an email. It only applies while the list is empty — after
-   * that the list is the answer and this is ignored, so leaving it set does
-   * not quietly re-admit somebody who was removed.
+   * Who gets in the first time, before there is anybody to add anybody. It only applies
+   * while the list is empty, so leaving it set does not re-admit somebody removed.
    */
   bootstrap: string | null;
   sessionSecret: string;
@@ -47,11 +36,8 @@ let cached: Endpoints | null = null;
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 /**
- * Ask the realm where its endpoints are, once.
- *
- * Written down in configuration they would be four more strings to get wrong,
- * and they are all derivable from the issuer, which is the one string that has
- * to match exactly anyway — it is what the tokens claim.
+ * Ask the realm where its endpoints are, once. Written down they would be four more strings
+ * to get wrong, and all are derivable from the issuer, which has to match anyway.
  */
 async function discover(config: OidcConfig): Promise<Endpoints> {
   if (cached) return cached;
@@ -121,10 +107,8 @@ export async function startLogin(config: OidcConfig): Promise<LoginStart> {
 }
 
 /**
- * Where to land after the realm has ended the session.
- *
- * Derived from the callback URL rather than configured separately, because the
- * two have to be on the same origin and one string is one fewer to get wrong.
+ * Where to land after the realm has ended the session. Derived from the callback URL, since
+ * the two have to be on the same origin and one string is one fewer to get wrong.
  */
 export function postLogoutTarget(redirectUri: string): string {
   return new URL("/admin/login", redirectUri).toString();
@@ -143,16 +127,8 @@ export function logoutUrl(
 }
 
 /**
- * Where to send somebody who is signing out.
- *
- * Clearing our own cookie is not signing out. The realm still holds an SSO
- * session, so the next request to /admin/login comes straight back with a
- * fresh code and no prompt — you click sign out and land in the inbox again,
- * which is what GRYT-539 was.
- *
- * Returns null when the realm cannot be reached or advertises no logout
- * endpoint. The caller has already cleared the cookie by then, so the worst
- * case is the old behaviour rather than an error page in place of signing out.
+ * Where to send somebody who is signing out. Clearing our own cookie is not signing out: the
+ * realm still holds an SSO session (GRYT-539). Null when it advertises no logout endpoint.
  */
 export async function endSession(config: OidcConfig): Promise<string | null> {
   try {
@@ -170,12 +146,8 @@ export interface Person {
   subject: string;
   name: string;
   /**
-   * Only set when the realm says the address has been verified.
-   *
-   * Adding somebody by email is the normal way to use the allowlist, so the
-   * email is what decides whether a stranger gets in the first time. An address
-   * anybody can type into their own profile would make that a way in rather
-   * than a check — so an unverified one is treated as no email at all.
+   * Only set when the realm says the address has been verified. Email is what decides whether
+   * a stranger gets in, so an address anybody can type into a profile is treated as none.
    */
   email: string | null;
 }
@@ -231,11 +203,8 @@ export async function completeLogin(
 }
 
 /**
- * The session cookie: who they are, when it stops being true, and a signature.
- *
- * Signed rather than stored, because a table of sessions would be the only
- * thing in this service that has to be cleaned up on a schedule, and there is
- * nothing in a session worth keeping.
+ * The session cookie: who they are, when it stops being true, and a signature. Signed rather
+ * than stored, because a table of sessions would be the only thing needing a schedule.
  */
 export function signSession(config: OidcConfig, person: Person, now: number): string {
   const payload = {
@@ -289,11 +258,8 @@ export function oidcFrom(config: Config): OidcConfig | null {
   const clientId = process.env.REPORTS_OIDC_CLIENT_ID?.trim();
   const clientSecret = process.env.REPORTS_OIDC_CLIENT_SECRET?.trim();
 
-  // The issuer alone decides whether sign-in is on. Requiring all three to be
-  // absent looked stricter and was worse: a compose file that defaults the
-  // client id to something sensible — which is a reasonable thing for a compose
-  // file to do — then reads as half configured and takes the whole service
-  // down. That happened on the first deploy, on 2026-08-22.
+  // The issuer alone decides whether sign-in is on. Requiring all three to be absent looked
+  // stricter and took the service down on the first deploy, over a defaulted client id.
   if (!issuer) return null;
 
   if (!clientId || !clientSecret) {

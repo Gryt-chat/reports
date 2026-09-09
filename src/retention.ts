@@ -6,20 +6,8 @@ import { scrubReportIdentifiers } from "./db.ts";
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Forget who sent a report, once knowing is no longer any use.
- *
- * The address and thumbprint exist for one reason: the noise auto-ban counts a
- * submitter's junk against them, over `autoBan.windowHours`. **Nothing reads
- * either column beyond that window**, so the retention default is two days
- * rather than a month.
- *
- * `install_id` and `user_agent` stay. An install id is meaningless outside this
- * database and is what shows that a crash report and last week's crash report
- * came from the same copy of the app. A user-agent is the app version and the
- * OS, both of which the row already carries in their own columns.
- *
- * The report itself stays whole. What somebody wrote is the part with value,
- * and it is still readable, still filed as a task, still countable.
+ * Forget who sent a report, once knowing is no longer any use: nothing reads the address or
+ * thumbprint past the auto-ban window. `install_id` and `user_agent` stay, and so does the text.
  */
 export function scrubOldIdentifiers(config: Config, now: number): number {
   const days = config.retention.identifierDays;

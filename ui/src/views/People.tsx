@@ -6,10 +6,8 @@ import { api, type Person } from "../lib/api";
 import { fullDate } from "../lib/format";
 
 /**
- * Who can read this.
- *
- * Keycloak says who somebody is; this list says whether they get in. A Gryt
- * account is not enough on its own, which is the point — anybody can make one.
+ * Who can read this. Keycloak says who somebody is; this list says whether they get in. A
+ * Gryt account is not enough on its own, which is the point — anybody can make one.
  */
 export function People() {
   const [people, setPeople] = useState<Person[]>([]);

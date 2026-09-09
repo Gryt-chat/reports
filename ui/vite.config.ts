@@ -1,10 +1,8 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// The dashboard is served by the reports service itself, under /admin, behind
-// the same Keycloak session the plain pages use. Same origin means the session
-// cookie is simply sent — no CORS, no token in JavaScript, nowhere for one to
-// leak from.
+// The dashboard is served by the reports service itself, under /admin, behind the same
+// Keycloak session. Same origin means the session cookie is sent — no CORS, no token.
 export default defineConfig({
   base: "/admin/",
   build: {
