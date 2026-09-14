@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "node --test --experimental-strip-types \"src/**/*.test.ts\"",
-    "test:comment-length": "node scripts/check-comment-length.mjs"
+    "test:comment-length": "node scripts/check-comment-length.mjs",
+    "test:retired-logo": "node scripts/check-retired-logo.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
