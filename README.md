@@ -269,6 +269,30 @@ else on the GPU.
 Ollama has no authentication, so whatever can reach it can use it. It also has
 to be reachable from wherever this container runs, which is rarely localhost.
 
+`REPORTS_OLLAMA_NUM_CTX` (16384) is how much the model gets to read at once.
+Ollama's own default is 4096, and a long report with its log tail and the
+model's thinking runs past that. `REPORTS_TRIAGE_THINK` lets a thinking model
+reason before it sorts, and `REPORTS_DRAFT_THINK` does the same when it drafts a
+task. Left unset, drafting follows triage. With thinking on, the request uses
+Qwen's recommended sampling (temperature 0.6, top_p 0.95, top_k 20), because
+greedy decoding in thinking mode can repeat itself until the timeout. Without
+it, temperature stays at 0 so the same report sorts the same way twice.
+
+The model is only ever `REPORTS_TRIAGE_MODEL`, so switching is a config change.
+Compare the two on real reports first:
+
+```sh
+cp /path/to/data/reports.db* /tmp/   # a copy, -wal included, not the live file
+node --experimental-strip-types scripts/compare-models.ts /tmp/reports.db \
+  --url http://<ollama-host>:11434 --models qwen3:14b,qwen3:30b-a3b \
+  --count 10 --draft --think
+```
+
+It opens the database read-only, runs each model over the most recent reports
+one model at a time, and prints the verdict, priority, area, time taken and draft
+title side by side. It saves nothing and files nothing. The first call for each
+model includes loading it, so that row's time runs long.
+
 **Through the API**: set `ANTHROPIC_API_KEY`. Naming `REPORTS_TRIAGE_PROVIDER`
 wins over both, which is how you point them at the same report and compare — and
 `triage_model` records which one sorted it, provider included

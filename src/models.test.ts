@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { after, before, test } from "node:test";
 
-import { modelFor, type ModelConfig } from "./models.ts";
+import { modelFor, samplingFor, type ModelConfig } from "./models.ts";
 
 /**
  * An Ollama that is not Ollama, enough to record what was asked and answer with whatever the
@@ -29,6 +29,8 @@ function config(overrides: Partial<ModelConfig> = {}): ModelConfig {
     keepAlive: "5m",
     timeoutMs: 2000,
     think: false,
+    draftThink: false,
+    numCtx: 16384,
     ...overrides,
   };
 }
@@ -80,7 +82,7 @@ test("asks Ollama the way Ollama expects to be asked", async () => {
   // answer in prose and every report fails to parse.
   assert.deepEqual(lastRequest?.format, SCHEMA);
   // Classification, not writing: the same report has to sort the same way twice.
-  assert.deepEqual(lastRequest?.options, { temperature: 0 });
+  assert.deepEqual(lastRequest?.options, { temperature: 0, num_ctx: 16384 });
   assert.deepEqual(lastRequest?.messages, [
     { role: "system", content: "be terse" },
     { role: "user", content: "a report" },
@@ -154,4 +156,43 @@ test("an error mid-stream is an error, not a truncated verdict", async () => {
     ollama.removeAllListeners("request");
     ollama.on("request", original as never);
   }
+});
+
+
+test("the context window is sent, because Ollama's own default is 4096", async () => {
+  reply = { status: 200, body: { message: { content: "{}" } } };
+
+  await modelFor(config({ numCtx: 32768 })).classify("s", "p", SCHEMA);
+  assert.equal((lastRequest?.options as Record<string, unknown>).num_ctx, 32768);
+});
+
+test("thinking gets sampling, not greedy decoding", async () => {
+  assert.deepEqual(samplingFor(false), { temperature: 0 });
+  assert.deepEqual(samplingFor(true), { temperature: 0.6, top_p: 0.95, top_k: 20 });
+
+  reply = { status: 200, body: { message: { content: "{}" } } };
+  await modelFor(config({ think: true })).classify("s", "p", SCHEMA);
+  assert.equal(lastRequest?.think, true);
+  assert.deepEqual(lastRequest?.options, {
+    temperature: 0.6,
+    top_p: 0.95,
+    top_k: 20,
+    num_ctx: 16384,
+  });
+});
+
+test("drafting thinks by its own setting and triage by its own", async () => {
+  reply = { status: 200, body: { message: { content: "{}" } } };
+  const model = modelFor(config({ think: false, draftThink: true }));
+
+  await model.classify("s", "p", SCHEMA, "draft");
+  assert.equal(lastRequest?.think, true);
+  assert.equal((lastRequest?.options as Record<string, unknown>).temperature, 0.6);
+
+  await model.classify("s", "p", SCHEMA, "triage");
+  assert.equal(lastRequest?.think, false);
+  assert.equal((lastRequest?.options as Record<string, unknown>).temperature, 0);
+
+  await model.classify("s", "p", SCHEMA);
+  assert.equal(lastRequest?.think, false);
 });

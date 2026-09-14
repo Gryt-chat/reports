@@ -118,6 +118,14 @@ export class ApiError extends Error {
   }
 }
 
+/** A proxy that gives up waiting answers with its own page, not our JSON. */
+function fallbackMessage(status: number): string {
+  if (status === 504 || status === 524) {
+    return `Nothing answered in time (${status}). Try again in a minute.`;
+  }
+  return `Request failed (${status})`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/admin/api${path}`, {
     ...init,
@@ -133,7 +141,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { message?: string } | null;
-    throw new ApiError(res.status, body?.message ?? `Request failed (${res.status})`);
+    throw new ApiError(res.status, body?.message ?? fallbackMessage(res.status));
   }
 
   return (await res.json()) as T;
