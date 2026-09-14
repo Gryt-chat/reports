@@ -195,35 +195,44 @@ export class Triager {
 
   private async classify(report: ReportRow): Promise<TriageResult> {
     const recent = recentSummaries(this.config.triage.duplicateWindow);
-    const prompt = describe(report) + duplicateContext(recent, report.id);
-
-    const text = await this.model.classify(SYSTEM, prompt, SCHEMA);
-
-    if (!text.trim()) {
-      throw new Error("The model said nothing");
-    }
-
-    const parsed = JSON.parse(text) as {
-      verdict: string;
-      priority: string;
-      summary: string;
-      area: string;
-      duplicate_of: string | null;
-      reasoning: string;
-    };
-
-    return {
-      verdict: parsed.verdict,
-      priority: parsed.priority,
-      summary: parsed.summary,
-      area: parsed.area,
-      // A nullable type in a JSON schema is not something every local runtime converts to a
-      // grammar cleanly, and the ones that struggle answer with an empty string.
-      duplicateOf: parsed.duplicate_of?.trim() ? parsed.duplicate_of : null,
-      reasoning: parsed.reasoning,
-      model: this.model.name,
-    };
+    return classifyReport(this.model, report, recent);
   }
+}
+
+/** One report through the model, with no database. The model comparison script calls it too. */
+export async function classifyReport(
+  model: TriageModel,
+  report: ReportRow,
+  recent: ReportRow[],
+): Promise<TriageResult> {
+  const prompt = describe(report) + duplicateContext(recent, report.id);
+
+  const text = await model.classify(SYSTEM, prompt, SCHEMA, "triage");
+
+  if (!text.trim()) {
+    throw new Error("The model said nothing");
+  }
+
+  const parsed = JSON.parse(text) as {
+    verdict: string;
+    priority: string;
+    summary: string;
+    area: string;
+    duplicate_of: string | null;
+    reasoning: string;
+  };
+
+  return {
+    verdict: parsed.verdict,
+    priority: parsed.priority,
+    summary: parsed.summary,
+    area: parsed.area,
+    // A nullable type in a JSON schema is not something every local runtime converts to a
+    // grammar cleanly, and the ones that struggle answer with an empty string.
+    duplicateOf: parsed.duplicate_of?.trim() ? parsed.duplicate_of : null,
+    reasoning: parsed.reasoning,
+    model: model.name,
+  };
 }
 
 function toRowFields(result: TriageResult): Partial<ReportRow> {

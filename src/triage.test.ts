@@ -13,7 +13,8 @@ import {
   saveTriage,
   type ReportRow,
 } from "./db.ts";
-import { noiseBanFor } from "./triage.ts";
+import type { Purpose } from "./models.ts";
+import { classifyReport, noiseBanFor } from "./triage.ts";
 
 const AUTO_BAN = { threshold: 3, windowHours: 24, days: 7 };
 
@@ -158,4 +159,27 @@ test("a threshold of zero turns the whole thing off", () => {
   const third = stored("noise", { ip });
 
   assert.equal(noiseBanFor(third, { ...AUTO_BAN, threshold: 0 }, Date.now()), null);
+});
+
+test("sorting is asked for as triage, so it thinks by the triage setting", async () => {
+  const purposes: (Purpose | undefined)[] = [];
+  const model = {
+    name: "fake",
+    classify: async (_s: string, _p: string, _schema: object, purpose?: Purpose) => {
+      purposes.push(purpose);
+      return JSON.stringify({
+        verdict: "actionable",
+        priority: "low",
+        summary: "s",
+        area: "voice",
+        duplicate_of: "",
+        reasoning: "r",
+      });
+    },
+  };
+
+  const result = await classifyReport(model, stored("actionable", {}), []);
+  assert.equal(result.verdict, "actionable");
+  assert.equal(result.duplicateOf, null);
+  assert.deepEqual(purposes, ["triage"]);
 });

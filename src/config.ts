@@ -80,6 +80,8 @@ export interface Config {
     keepAlive: string;
     timeoutMs: number;
     think: boolean;
+    draftThink: boolean;
+    numCtx: number;
     pollMs: number;
     batch: number;
     maxAttempts: number;
@@ -212,6 +214,10 @@ export function loadConfig(): Config {
         "qwen3:8b"
       : "claude-opus-5";
 
+  // Off, because sorting a report into four fields is not a problem to reason through,
+  // and on a model running half in RAM the reasoning is most of the wall clock.
+  const think = bool("REPORTS_TRIAGE_THINK", false);
+
   return {
     host: process.env.HOST || "0.0.0.0",
     port: int("PORT", 8080, 1, 65535),
@@ -264,9 +270,10 @@ export function loadConfig(): Config {
       ollamaUrl: ollamaUrl || "http://127.0.0.1:11434",
       keepAlive: process.env.REPORTS_OLLAMA_KEEP_ALIVE?.trim() || "5m",
       timeoutMs: int("REPORTS_TRIAGE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-      // Off, because sorting a report into four fields is not a problem to reason through,
-      // and on a model running half in RAM the reasoning is most of the wall clock.
-      think: bool("REPORTS_TRIAGE_THINK", false),
+      think,
+      // Unset follows triage, so a deployment that never names it drafts the way it did.
+      draftThink: bool("REPORTS_DRAFT_THINK", think),
+      numCtx: int("REPORTS_OLLAMA_NUM_CTX", 16_384, 2048, 262_144),
       pollMs: int("REPORTS_TRIAGE_POLL_MS", 15_000, 1000, 3_600_000),
       batch: int("REPORTS_TRIAGE_BATCH", 5, 1, 50),
       maxAttempts: int("REPORTS_TRIAGE_MAX_ATTEMPTS", 3, 1, 20),

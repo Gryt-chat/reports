@@ -9,8 +9,11 @@ export interface TriageModel {
   /** Recorded on every report this sorts. Carries the provider, not just the model. */
   readonly name: string;
   /** Returns whatever the model said, which the schema constrains to JSON. */
-  classify(system: string, prompt: string, schema: object): Promise<string>;
+  classify(system: string, prompt: string, schema: object, purpose?: Purpose): Promise<string>;
 }
+
+/** Sorting a report, or writing a task from it. Each can be told to think or not. */
+export type Purpose = "triage" | "draft";
 
 export interface ModelConfig {
   provider: "anthropic" | "ollama";
@@ -21,6 +24,18 @@ export interface ModelConfig {
   timeoutMs: number;
   /** Whether a thinking model is allowed to reason before answering. */
   think: boolean;
+  /** The same, for drafting a task. */
+  draftThink: boolean;
+  /** Ollama's context window. Its default of 4096 overflows on a long report with thinking. */
+  numCtx: number;
+}
+
+/**
+ * Greedy decoding in thinking mode can loop until the timeout, so thinking gets Qwen's
+ * recommended sampling. Without thinking, temperature 0 keeps the same report sorting the same way.
+ */
+export function samplingFor(think: boolean): Record<string, number> {
+  return think ? { temperature: 0.6, top_p: 0.95, top_k: 20 } : { temperature: 0 };
 }
 
 class AnthropicModel implements TriageModel {
@@ -71,6 +86,8 @@ class OllamaModel implements TriageModel {
   private readonly keepAlive: string;
   private readonly timeoutMs: number;
   private readonly think: boolean;
+  private readonly draftThink: boolean;
+  private readonly numCtx: number;
 
   constructor(config: ModelConfig) {
     this.url = config.ollamaUrl.replace(/\/$/, "");
@@ -78,10 +95,19 @@ class OllamaModel implements TriageModel {
     this.keepAlive = config.keepAlive;
     this.timeoutMs = config.timeoutMs;
     this.think = config.think;
+    this.draftThink = config.draftThink;
+    this.numCtx = config.numCtx;
     this.name = `ollama:${config.model}`;
   }
 
-  async classify(system: string, prompt: string, schema: object): Promise<string> {
+  async classify(
+    system: string,
+    prompt: string,
+    schema: object,
+    purpose: Purpose = "triage",
+  ): Promise<string> {
+    const think = purpose === "draft" ? this.draftThink : this.think;
+
     const res = await fetch(`${this.url}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -95,14 +121,9 @@ class OllamaModel implements TriageModel {
         stream: true,
         format: schema,
         keep_alive: this.keepAlive,
-        // Thinking models narrate before they answer and `format` does not constrain the
-        // narration. This is a four-field classification; ignored by models that do not think.
-        think: this.think,
-        options: {
-          // Classification, not writing. The same report should sort the same
-          // way twice.
-          temperature: 0,
-        },
+        // Ignored by models that do not think.
+        think,
+        options: { ...samplingFor(think), num_ctx: this.numCtx },
         messages: [
           { role: "system", content: system },
           { role: "user", content: prompt },

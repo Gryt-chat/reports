@@ -67,7 +67,12 @@ export async function draftTask(
   report: ReportRow,
   model: TriageModel,
 ): Promise<TaskDraft> {
-  const text = await model.classify(SYSTEM, describe(report), SCHEMA);
+  let text: string;
+  try {
+    text = await model.classify(SYSTEM, describe(report), SCHEMA, "draft");
+  } catch (err) {
+    throw draftError(err);
+  }
   if (!text.trim()) throw new HttpError(502, "no_draft", "The model said nothing");
 
   let parsed: { title?: unknown; description?: unknown };
@@ -84,6 +89,24 @@ export async function draftTask(
   }
 
   return { title: title.slice(0, 250), description: description.slice(0, 8000) };
+}
+
+/** What the inbox is told when the model fails, instead of a bare 500. The log keeps the rest. */
+function draftError(err: unknown): HttpError {
+  if (err instanceof HttpError) return err;
+  consola.warn("[task] Drafting failed", err);
+
+  if (err instanceof Error && err.name === "TimeoutError") {
+    return new HttpError(
+      504,
+      "draft_timeout",
+      "The model did not finish a draft in time. It may be loading or busy, so try again in a minute.",
+    );
+  }
+
+  const detail = err instanceof Error ? err.message.slice(0, 200) : "";
+  const message = `The model could not draft a task. ${detail}`.trim();
+  return new HttpError(502, "draft_failed", message);
 }
 
 /**
