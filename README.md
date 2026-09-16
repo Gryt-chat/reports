@@ -447,9 +447,11 @@ A listing leaves out the `payload` — the diagnostics blob is most of a report'
 bytes, and it's there on the single-report route when it's wanted. That keeps
 the queue cheap to read for a person and for anything else going through it.
 
-Set `REPORTS_DISCORD_WEBHOOK_URL` and each report is posted to Discord as it
-arrives (`REPORTS_NOTIFY_ON=receive`) or once triage has looked at it (`triage`,
-the default), so reading the inbox doesn't depend on remembering it's there.
+Set `REPORTS_DISCORD_WEBHOOK_URL`, `REPORTS_GRYT_WEBHOOK_URL` or both, and each
+report is posted there as it arrives (`REPORTS_NOTIFY_ON=receive`) or once triage
+has looked at it (`triage`, the default), so reading the inbox doesn't depend on
+remembering it's there. The Gryt webhook gets the same card Discord does, so
+point it at a channel only the people who read the inbox can see.
 
 ## Running it
 
