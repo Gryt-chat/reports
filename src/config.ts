@@ -121,6 +121,7 @@ export interface Config {
   };
 
   discordWebhookUrl: string | null;
+  grytWebhookUrl: string | null;
   /** Notify on arrival, after triage, or not at all. */
   notifyOn: "receive" | "triage" | "never";
   /** Where the admin inbox lives, for the links in a notification. */
@@ -307,6 +308,7 @@ export function loadConfig(): Config {
     })(),
 
     discordWebhookUrl: process.env.REPORTS_DISCORD_WEBHOOK_URL?.trim() || null,
+    grytWebhookUrl: process.env.REPORTS_GRYT_WEBHOOK_URL?.trim() || null,
     notifyOn: (process.env.REPORTS_NOTIFY_ON as Config["notifyOn"]) || "triage",
     publicUrl: process.env.REPORTS_PUBLIC_URL?.trim().replace(/\/$/, "") || null,
   };
