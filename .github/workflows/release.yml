@@ -202,8 +202,6 @@ jobs:
             "${ARGS[@]}" \
             --push .
 
-      # discord-release-notify.yml already fires on release:published, so there
-      # is no notification step here.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -213,3 +211,19 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Releases created with GITHUB_TOKEN do not emit a second release:published
+      # workflow, so announce from the release job itself.
+      - name: Announce the release on Discord and Gryt
+        uses: Gryt-chat/.github/actions/release-notify@main
+        with:
+          component: Reports
+          version: ${{ steps.version.outputs.version }}
+          channel: ${{ steps.channel.outputs.channel }}
+          repository: ${{ github.repository }}
+          tag: v${{ steps.version.outputs.version }}
+          artifact-label: Docker
+          artifact-value: ghcr.io/gryt-chat/reports:${{ steps.version.outputs.version }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          discord-webhook-url: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+          gryt-webhook-url: ${{ secrets.GRYT_RELEASE_WEBHOOK_URL }}
