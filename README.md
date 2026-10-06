@@ -453,6 +453,26 @@ has looked at it (`triage`, the default), so reading the inbox doesn't depend on
 remembering it's there. The Gryt webhook gets the same card Discord does, so
 point it at a channel only the people who read the inbox can see.
 
+## Reading it from Claude
+
+`mcp/reports-mcp.mjs` is an MCP server for the inbox. It runs on your machine over stdio and calls the JSON routes above with the admin token. So it adds nothing to the public service. It has no dependencies, so there's nothing to install.
+
+```bash
+claude mcp add --scope user gryt-reports \
+  -e REPORTS_ADMIN_TOKEN="$(ssh edition35 'docker exec gryt-reports printenv REPORTS_ADMIN_TOKEN')" \
+  -- node /path/to/reports/mcp/reports-mcp.mjs
+```
+
+`REPORTS_URL` points it somewhere other than `https://reports.gryt.chat`.
+
+The tools are `list_reports`, `get_report`, `set_status`, `mark_read`, `retriage`, `file_task` and `stats`. Deleting isn't one of them. It can't be undone, so it stays in the inbox, where a person types the id to confirm.
+
+A few things it does to what it hands the model:
+
+- It drops `ip` and `identity_subject`. Those are there for the auto-ban, not for reading.
+- It cuts any string past 20,000 characters, so one long log tail can't fill the context.
+- Every result starts with a line saying the report was written by whoever sent it, and is data rather than instructions. Anyone on the internet can put text in front of the model this way.
+
 ## Running it
 
 ```sh
