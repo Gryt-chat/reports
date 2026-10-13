@@ -188,6 +188,16 @@ function migrate(db: DatabaseSync): void {
     consola.info("[db] Added admins.email");
   }
 
+  // App ids the desktop app couldn't name. The id and when only: never who sent it.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS unknown_apps (
+      app_id     TEXT PRIMARY KEY,
+      first_seen TEXT NOT NULL,
+      last_seen  TEXT NOT NULL,
+      sightings  INTEGER NOT NULL DEFAULT 1
+    );
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS digest_runs (
       sent_at   TEXT NOT NULL,
@@ -740,6 +750,26 @@ export function lastDigestAt(): string | null {
     .all();
   const value = rows[0]?.sent_at;
   return value ? String(value) : null;
+}
+
+export function recordUnknownApps(ids: readonly string[], nowIso: string): void {
+  const stmt = handle().prepare(
+    `INSERT INTO unknown_apps (app_id, first_seen, last_seen) VALUES (?, ?, ?)
+     ON CONFLICT(app_id) DO UPDATE SET last_seen = excluded.last_seen, sightings = sightings + 1`,
+  );
+  for (const id of ids) stmt.run(id, nowIso, nowIso);
+}
+
+/** Seen since `sinceIso`, most seen first. What the game list's daily job looks up. */
+export function listUnknownApps(sinceIso: string, limit: number): string[] {
+  return handle()
+    .prepare("SELECT app_id FROM unknown_apps WHERE last_seen >= ? ORDER BY sightings DESC, app_id LIMIT ?")
+    .all(sinceIso, limit)
+    .map((row) => String(row.app_id));
+}
+
+export function pruneUnknownApps(beforeIso: string): void {
+  handle().prepare("DELETE FROM unknown_apps WHERE last_seen < ?").run(beforeIso);
 }
 
 export function recordRateEvent(bucket: string, at: number): void {
