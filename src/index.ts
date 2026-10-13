@@ -30,6 +30,7 @@ import { oidcFrom, type OidcConfig } from "./oidc.ts";
 import { newReportId, normaliseReport } from "./report.ts";
 import { scrubOldIdentifiers } from "./retention.ts";
 import { Triager } from "./triage.ts";
+import { giveUnknownApps, takeUnknownApps } from "./unknownApps.ts";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -124,6 +125,16 @@ async function handle(
 
   if (url.pathname === "/v1/reports" && req.method === "POST") {
     await ingest(req, res, config, triager);
+    return;
+  }
+
+  // App ids the desktop app couldn't name, for the game list's daily job. Ids only.
+  if (url.pathname === "/v1/unknown-apps" && req.method === "POST") {
+    await takeUnknownApps(req, res, config);
+    return;
+  }
+  if (url.pathname === "/v1/unknown-apps" && req.method === "GET") {
+    giveUnknownApps(res);
     return;
   }
 
