@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { checkAppKey } from "./auth.ts";
@@ -51,7 +52,18 @@ export async function takeUnknownApps(req: IncomingMessage, res: ServerResponse,
   sendJson(res, 202, { accepted: ids.length });
 }
 
-export function giveUnknownApps(res: ServerResponse, now = Date.now()): void {
+/** A rarely seen id can point at one person, so the list is for the game list's job only. */
+export function mayReadUnknownApps(authorization: string | null, token: string | null): boolean {
+  if (!token || !authorization?.startsWith("Bearer ")) return false;
+  const given = Buffer.from(authorization.slice(7));
+  const wanted = Buffer.from(token);
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
+}
+
+export function giveUnknownApps(req: IncomingMessage, res: ServerResponse, config: Config, now = Date.now()): void {
+  if (!mayReadUnknownApps(header(req, "authorization"), config.unknownAppsToken)) {
+    throw new HttpError(404, "not_found", "No such endpoint");
+  }
   pruneUnknownApps(new Date(now - LISTED_FOR_MS).toISOString());
   sendJson(res, 200, { ids: listUnknownApps(new Date(now - LISTED_FOR_MS).toISOString(), MAX_LISTED) });
 }

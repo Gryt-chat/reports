@@ -70,6 +70,8 @@ export interface Config {
   trustedProxies: string[];
 
   adminToken: string | null;
+  /** Reads the unknown app ids. Unset, nobody can, which is the safe default. */
+  unknownAppsToken: string | null;
 
   triage: {
     enabled: boolean;
@@ -263,6 +265,7 @@ export function loadConfig(): Config {
     trustedProxies: list("REPORTS_TRUSTED_PROXIES"),
 
     adminToken,
+    unknownAppsToken: process.env.REPORTS_UNKNOWN_APPS_TOKEN?.trim() || null,
 
     triage: {
       enabled: triageEnabled,
