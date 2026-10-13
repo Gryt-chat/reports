@@ -491,6 +491,7 @@ before deploying:
 |---|---|---|
 | `REPORTS_APP_KEYS` | — | `mobile:key,desktop:key`. Required. |
 | `REPORTS_ADMIN_TOKEN` | — | For scripts. People sign in instead. |
+| `REPORTS_UNKNOWN_APPS_TOKEN` | — | Lets the game list's daily job read `GET /v1/unknown-apps`. Unset, that endpoint answers 404 to everyone |
 | `REPORTS_OIDC_ISSUER` | — | e.g. `https://auth.gryt.chat/realms/gryt`. With `_CLIENT_ID` and `_CLIENT_SECRET`, turns on sign-in. |
 | `REPORTS_BOOTSTRAP_ADMIN` | — | Who gets in first, while the list is empty. |
 | `REPORTS_TRUST_PROXY` | `true` | Read the client address from `cf-connecting-ip` / `x-forwarded-for`. |

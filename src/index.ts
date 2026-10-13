@@ -134,7 +134,7 @@ async function handle(
     return;
   }
   if (url.pathname === "/v1/unknown-apps" && req.method === "GET") {
-    giveUnknownApps(res);
+    giveUnknownApps(req, res, config);
     return;
   }
 

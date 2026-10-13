@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 
 import { closeDb, initDb, listUnknownApps, pruneUnknownApps, recordUnknownApps } from "./db.ts";
-import { cleanIds, withinLimit } from "./unknownApps.ts";
+import { cleanIds, mayReadUnknownApps, withinLimit } from "./unknownApps.ts";
 
 const WOW = "805124430774272000";
 const MODRINTH = "1008017436016410644";
@@ -42,5 +42,12 @@ describe("unknown app ids", () => {
     for (let i = 0; i < 3; i++) assert.equal(withinLimit("203.0.113.9", now, 3), true);
     assert.equal(withinLimit("203.0.113.9", now, 3), false);
     assert.equal(withinLimit("203.0.113.9", now + 61 * 60 * 1000, 3), true);
+  });
+
+  it("is readable only with the token, and by nobody when none is set", () => {
+    assert.equal(mayReadUnknownApps("Bearer s3cret-token", "s3cret-token"), true);
+    assert.equal(mayReadUnknownApps("Bearer wrong-token1", "s3cret-token"), false);
+    assert.equal(mayReadUnknownApps(null, "s3cret-token"), false);
+    assert.equal(mayReadUnknownApps("Bearer anything", null), false);
   });
 });
