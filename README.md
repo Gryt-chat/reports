@@ -455,12 +455,12 @@ point it at a channel only the people who read the inbox can see.
 
 ## Reading it from Claude
 
-`mcp/reports-mcp.mjs` is an MCP server for the inbox. It runs on your machine over stdio and calls the JSON routes above with the admin token. So it adds nothing to the public service. It has no dependencies, so there's nothing to install.
+`mcp/reports-mcp.ts` is an MCP server for the inbox. It runs on your machine over stdio and calls the JSON routes above with the admin token. So it adds nothing to the public service. It has no dependencies, so there's nothing to install.
 
 ```bash
 claude mcp add --scope user gryt-reports \
   -e REPORTS_ADMIN_TOKEN="$(ssh edition35 'docker exec gryt-reports printenv REPORTS_ADMIN_TOKEN')" \
-  -- node /path/to/reports/mcp/reports-mcp.mjs
+  -- node /path/to/reports/mcp/reports-mcp.ts
 ```
 
 `REPORTS_URL` points it somewhere other than `https://reports.gryt.chat`.

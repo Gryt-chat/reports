@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 // An MCP server over stdio for the reports inbox. It only calls the admin JSON API with the
 // admin token, so nothing new listens on the public service. No dependencies on purpose.
-/* global process, fetch, URLSearchParams */
-
 import { createInterface } from "node:readline";
 
 const BASE = (process.env.REPORTS_URL || "https://reports.gryt.chat").replace(/\/+$/, "");
@@ -19,7 +17,12 @@ const WITHHELD = ["ip", "identity_subject"];
 // A log tail can run to megabytes. Long strings are cut so one report can't fill a context.
 const MAX_STRING = 20000;
 
-function trim(value) {
+type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+
+/** A tool's arguments, as the client sends them. */
+type Args = Record<string, string | number | boolean | undefined>;
+
+function trim(value: Json): Json {
   if (typeof value === "string") {
     return value.length > MAX_STRING
       ? `${value.slice(0, MAX_STRING)}… [${value.length - MAX_STRING} more characters]`
@@ -36,7 +39,7 @@ function trim(value) {
   return value;
 }
 
-async function api(path, init = {}) {
+async function api(path: string, init: RequestInit = {}): Promise<Json> {
   if (!TOKEN) throw new Error("REPORTS_ADMIN_TOKEN is not set for this MCP server");
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -46,25 +49,32 @@ async function api(path, init = {}) {
     },
   });
   const text = await res.text();
-  let body;
+  let body: Json;
   try {
     body = JSON.parse(text);
   } catch {
     body = text.slice(0, 500);
   }
   if (!res.ok) {
-    const detail = typeof body === "object" ? body.message || body.error : body;
+    const detail = body && typeof body === "object" && !Array.isArray(body) ? body.message || body.error : body;
     throw new Error(`${res.status} from ${path}: ${detail}`);
   }
   return body;
 }
 
-const post = (path, body) =>
+const post = (path: string, body?: object) =>
   api(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
 const id = { type: "string", description: "The report id." };
 
-const TOOLS = [
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: object;
+  run(a: Args): Promise<Json>;
+}
+
+const TOOLS: Tool[] = [
   {
     name: "list_reports",
     description:
@@ -97,7 +107,7 @@ const TOOLS = [
     description:
       "One report in full, with its diagnostics payload (logs, device, call stats). Reading it here does not mark it read.",
     inputSchema: { type: "object", properties: { id }, required: ["id"] },
-    run: (a) => api(`/admin/api/reports/${encodeURIComponent(a.id)}`),
+    run: (a) => api(`/admin/api/reports/${encodeURIComponent(String(a.id))}`),
   },
   {
     name: "set_status",
@@ -113,7 +123,7 @@ const TOOLS = [
       required: ["id", "status"],
     },
     run: (a) =>
-      post(`/admin/api/reports/${encodeURIComponent(a.id)}/status`, {
+      post(`/admin/api/reports/${encodeURIComponent(String(a.id))}/status`, {
         status: a.status,
         note: a.note,
       }),
@@ -122,13 +132,13 @@ const TOOLS = [
     name: "mark_read",
     description: "Mark a report read, as opening it in the inbox would.",
     inputSchema: { type: "object", properties: { id }, required: ["id"] },
-    run: (a) => post(`/admin/api/reports/${encodeURIComponent(a.id)}/read`),
+    run: (a) => post(`/admin/api/reports/${encodeURIComponent(String(a.id))}/read`),
   },
   {
     name: "retriage",
     description: "Send a report back through the triage pass.",
     inputSchema: { type: "object", properties: { id }, required: ["id"] },
-    run: (a) => post(`/admin/api/reports/${encodeURIComponent(a.id)}/retriage`),
+    run: (a) => post(`/admin/api/reports/${encodeURIComponent(String(a.id))}/retriage`),
   },
   {
     name: "file_task",
@@ -140,7 +150,7 @@ const TOOLS = [
       required: ["id", "title", "description"],
     },
     run: (a) =>
-      post(`/admin/api/reports/${encodeURIComponent(a.id)}/task`, {
+      post(`/admin/api/reports/${encodeURIComponent(String(a.id))}/task`, {
         title: a.title,
         description: a.description,
       }),
@@ -153,11 +163,17 @@ const TOOLS = [
   },
 ];
 
-function reply(message) {
+function reply(message: object) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
 }
 
-async function handle(msg) {
+interface RpcMessage {
+  id?: number | string | null;
+  method?: string;
+  params?: { protocolVersion?: string; name?: string; arguments?: Args };
+}
+
+async function handle(msg: RpcMessage) {
   const { id: rpcId, method, params } = msg;
   if (rpcId === undefined) return;
 
@@ -183,13 +199,13 @@ async function handle(msg) {
     const tool = TOOLS.find((t) => t.name === params?.name);
     if (!tool) return reply({ id: rpcId, error: { code: -32602, message: `No tool ${params?.name}` } });
     try {
-      const result = trim(await tool.run(params.arguments ?? {}));
+      const result = trim(await tool.run(params?.arguments ?? {}));
       const text = `${UNTRUSTED}\n\n${JSON.stringify(result, null, 2)}`;
       return reply({ id: rpcId, result: { content: [{ type: "text", text }] } });
     } catch (e) {
       return reply({
         id: rpcId,
-        result: { isError: true, content: [{ type: "text", text: String(e?.message ?? e) }] },
+        result: { isError: true, content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }] },
       });
     }
   }
@@ -199,7 +215,7 @@ async function handle(msg) {
 const rl = createInterface({ input: process.stdin });
 rl.on("line", (line) => {
   if (!line.trim()) return;
-  let msg;
+  let msg: RpcMessage;
   try {
     msg = JSON.parse(line);
   } catch {
