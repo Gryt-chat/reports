@@ -17,6 +17,8 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn lint
       - run: yarn typecheck
+      # The scripts, the MCP server and the lint config, which the app's tsconfig doesn't reach.
+      - run: npx tsc -p scripts
       - run: yarn test
 
       # No comment runs past two lines. The script carries the list of paths still

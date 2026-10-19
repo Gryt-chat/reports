@@ -17,10 +17,10 @@
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config src",
     "test": "node --test --experimental-strip-types \"src/**/*.test.ts\"",
-    "test:comment-length": "node scripts/check-comment-length.mjs",
-    "test:retired-logo": "node scripts/check-retired-logo.mjs"
+    "test:comment-length": "node scripts/check-comment-length.ts",
+    "test:retired-logo": "node scripts/check-retired-logo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
