@@ -44,6 +44,6 @@ describe("waitlist", () => {
   it("puts the leave link and the discount in the welcome mail", () => {
     const mail = welcomeMail("kari@example.com", "https://reports.example/v1/waitlist/leave?t=abc");
     assert.match(mail.text, /leave\?t=abc/);
-    assert.match(mail.text, /50% off your first year/);
+    assert.match(mail.text, /50% off your first three months/);
   });
 });
