@@ -45,5 +45,7 @@ describe("waitlist", () => {
     const mail = welcomeMail("kari@example.com", "https://reports.example/v1/waitlist/leave?t=abc");
     assert.match(mail.text, /leave\?t=abc/);
     assert.match(mail.text, /50% off your first three months/);
+    assert.match(mail.html ?? "", /href="https:\/\/reports\.example\/v1\/waitlist\/leave\?t=abc"/);
+    assert.match(mail.html ?? "", /cid:gryt-mark/);
   });
 });

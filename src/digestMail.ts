@@ -44,7 +44,7 @@ const SERIES = [ACCENT, SECONDARY, SUCCESS, WARNING];
 const R_LG = "20px";
 const R_FULL = "999px";
 
-const FONT =
+export const FONT =
   "'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 /**
@@ -86,7 +86,7 @@ export function headline(bug: number, feedback: number): string {
   return `${plural(bug, "bug report", "bug reports")} and ${plural(feedback, "piece", "pieces")} of feedback.`;
 }
 
-function esc(value: string): string {
+export function esc(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
