@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { closeDb, initDb, joinWaitlist, leaveWaitlist, waitlistCount } from "./db.ts";
-import { cleanEmail, hashToken, welcomeMail } from "./waitlist.ts";
+import { closeDb, initDb, joinWaitlist, leaveWaitlist, waitlistByPlan, waitlistCount } from "./db.ts";
+import { cleanEmail, cleanPlan, hashToken, welcomeMail } from "./waitlist.ts";
 
 let dir: string;
 before(() => {
@@ -27,12 +27,18 @@ describe("waitlist", () => {
   });
 
   it("adds an address once and removes it by its leave token", () => {
-    assert.equal(joinWaitlist("kari@example.com", false, hashToken("t1-aaaaaaaaaaaaaaaaaaaa"), "2026-11-11"), true);
-    assert.equal(joinWaitlist("kari@example.com", true, hashToken("t2-aaaaaaaaaaaaaaaaaaaa"), "2026-11-12"), false);
+    assert.equal(joinWaitlist("kari@example.com", false, "community", hashToken("t1-aaaaaaaaaaaaaaaaaaaa"), "2026-11-11"), true);
+    assert.equal(joinWaitlist("kari@example.com", true, null, hashToken("t2-aaaaaaaaaaaaaaaaaaaa"), "2026-11-12"), false);
     assert.equal(waitlistCount(), 1);
+    assert.deepEqual(waitlistByPlan(), { community: 1 });
     assert.equal(leaveWaitlist(hashToken("t2-aaaaaaaaaaaaaaaaaaaa")), false);
     assert.equal(leaveWaitlist(hashToken("t1-aaaaaaaaaaaaaaaaaaaa")), true);
     assert.equal(waitlistCount(), 0);
+  });
+
+  it("keeps only plans that exist", () => {
+    assert.equal(cleanPlan("large"), "large");
+    for (const bad of ["Large", "company", "", 3, null, "<b>"]) assert.equal(cleanPlan(bad), null, String(bad));
   });
 
   it("puts the leave link and the discount in the welcome mail", () => {

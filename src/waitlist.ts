@@ -20,6 +20,11 @@ export function cleanEmail(value: unknown): string | null {
   return email;
 }
 
+const PLANS = new Set(["friends", "community", "large"]);
+
+export const cleanPlan = (value: unknown): string | null =>
+  typeof value === "string" && PLANS.has(value) ? value : null;
+
 export const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
 
 export function welcomeMail(to: string, leaveUrl: string): Mail {
@@ -67,7 +72,7 @@ export async function join(req: IncomingMessage, res: ServerResponse, config: Co
     throw new HttpError(429, "rate_limited", "Too many", { retryAfter: 3600 });
   }
 
-  let body: { email?: unknown; news?: unknown };
+  let body: { email?: unknown; news?: unknown; plan?: unknown };
   try {
     body = JSON.parse((await readBody(req, 2048)).toString("utf8")) as typeof body;
   } catch {
@@ -77,7 +82,7 @@ export async function join(req: IncomingMessage, res: ServerResponse, config: Co
   if (!email) throw new HttpError(400, "invalid_email", "That doesn't look like an email address");
 
   const token = randomBytes(24).toString("base64url");
-  const added = joinWaitlist(email, body.news === true, hashToken(token), new Date().toISOString());
+  const added = joinWaitlist(email, body.news === true, cleanPlan(body.plan), hashToken(token), new Date().toISOString());
   sendJson(res, 202, { ok: true });
   if (!added) return;
 

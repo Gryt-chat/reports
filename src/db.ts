@@ -100,6 +100,7 @@ export function initDb(dataDir: string): void {
     CREATE TABLE IF NOT EXISTS waitlist (
       email       TEXT PRIMARY KEY,
       news        INTEGER NOT NULL DEFAULT 0,
+      plan        TEXT,
       token_hash  TEXT NOT NULL UNIQUE,
       joined_at   TEXT NOT NULL
     );
@@ -846,15 +847,21 @@ export function listDeletions(limit = 100): DeletionRow[] {
 }
 
 /** False when the address is already on the list, so nobody gets the email twice. */
-export function joinWaitlist(email: string, news: boolean, tokenHash: string, at: string): boolean {
+export function joinWaitlist(email: string, news: boolean, plan: string | null, tokenHash: string, at: string): boolean {
   const r = handle()
-    .prepare("INSERT OR IGNORE INTO waitlist (email, news, token_hash, joined_at) VALUES (?, ?, ?, ?)")
-    .run(email, news ? 1 : 0, tokenHash, at);
+    .prepare("INSERT OR IGNORE INTO waitlist (email, news, plan, token_hash, joined_at) VALUES (?, ?, ?, ?, ?)")
+    .run(email, news ? 1 : 0, plan, tokenHash, at);
   return Number(r.changes) === 1;
 }
 
 export function leaveWaitlist(tokenHash: string): boolean {
   return Number(handle().prepare("DELETE FROM waitlist WHERE token_hash = ?").run(tokenHash).changes) === 1;
+}
+
+/** How many people asked about each plan; `none` is the form without a plan. */
+export function waitlistByPlan(): Record<string, number> {
+  const rows = handle().prepare("SELECT COALESCE(plan, 'none') AS plan, COUNT(*) AS n FROM waitlist GROUP BY plan").all();
+  return Object.fromEntries(rows.map((r) => [String(r.plan), Number(r.n)]));
 }
 
 export function waitlistCount(): number {
@@ -995,6 +1002,7 @@ export interface Stats {
   bugs: number;
   feedback: number;
   waitlist: number;
+  waitlistByPlan: Record<string, number>;
 }
 
 export function stats(): Stats {
@@ -1014,5 +1022,6 @@ export function stats(): Stats {
     bugs: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'bug'"),
     feedback: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'feedback'"),
     waitlist: waitlistCount(),
+    waitlistByPlan: waitlistByPlan(),
   };
 }
