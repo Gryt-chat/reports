@@ -31,6 +31,7 @@ import { newReportId, normaliseReport } from "./report.ts";
 import { scrubOldIdentifiers } from "./retention.ts";
 import { Triager } from "./triage.ts";
 import { giveUnknownApps, takeUnknownApps } from "./unknownApps.ts";
+import { join, leave, smtpSender, type SendMail } from "./waitlist.ts";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -46,9 +47,10 @@ async function main(): Promise<void> {
 
   const oidc = oidcFrom(config);
   const dashboard = new Dashboard(config.uiDir);
+  const sendMail = smtpSender(config);
 
   const server = http.createServer((req, res) => {
-    void handle(req, res, config, triager, oidc, dashboard, digest).catch((err) => {
+    void handle(req, res, config, triager, oidc, dashboard, digest, sendMail).catch((err) => {
       respondToError(res, err);
     });
   });
@@ -106,6 +108,7 @@ async function handle(
   oidc: OidcConfig | null,
   dashboard: Dashboard,
   digest: Digest,
+  sendMail: SendMail | null,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   applyCors(req, res, config.corsOrigins);
@@ -135,6 +138,15 @@ async function handle(
   }
   if (url.pathname === "/v1/unknown-apps" && req.method === "GET") {
     giveUnknownApps(req, res, config);
+    return;
+  }
+
+  if (url.pathname === "/v1/waitlist" && req.method === "POST") {
+    await join(req, res, config, sendMail);
+    return;
+  }
+  if (url.pathname === "/v1/waitlist/leave" && (req.method === "GET" || req.method === "POST")) {
+    await leave(req, res);
     return;
   }
 
