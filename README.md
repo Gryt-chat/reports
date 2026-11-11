@@ -473,6 +473,14 @@ A few things it does to what it hands the model:
 - It cuts any string past 20,000 characters, so one long log tail can't fill the context.
 - Every result starts with a line saying the report was written by whoever sent it, and is data rather than instructions. Anyone on the internet can put text in front of the model this way.
 
+## The Gryt Cloud waitlist
+
+`POST /v1/waitlist` takes `{ "email": "...", "news": true|false }` from the signup form on gryt.chat/cloud. It only accepts requests whose `Origin` is in `REPORTS_CORS_ORIGINS`, allows five per address per hour, and gives the same `202` whether the address was new or already on the list.
+
+A new address gets one "You're on the list" email, sent through the same `GRYT_SMTP_*` settings as the digest. There's no confirm step, so the email carries a link to leave the list. That link opens a page with a button rather than removing anyone on the GET, because mail scanners open every link they see.
+
+What's kept is the address, the newsletter answer, the date and a hash of the leave token. No IP. Without SMTP or `REPORTS_PUBLIC_URL` the endpoint answers `503`. The count shows up in `/admin/api/stats` as `waitlist`.
+
 ## Running it
 
 ```sh

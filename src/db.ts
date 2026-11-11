@@ -95,6 +95,14 @@ export function initDb(dataDir: string): void {
       reason      TEXT,
       task_url    TEXT
     );
+    /* Gryt Cloud's waitlist. Only the address, the newsletter answer and a hash of the
+       leave link's token; no IP, no name. */
+    CREATE TABLE IF NOT EXISTS waitlist (
+      email       TEXT PRIMARY KEY,
+      news        INTEGER NOT NULL DEFAULT 0,
+      token_hash  TEXT NOT NULL UNIQUE,
+      joined_at   TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS rate_events (
       bucket  TEXT NOT NULL,
       at      INTEGER NOT NULL
@@ -837,6 +845,22 @@ export function listDeletions(limit = 100): DeletionRow[] {
   );
 }
 
+/** False when the address is already on the list, so nobody gets the email twice. */
+export function joinWaitlist(email: string, news: boolean, tokenHash: string, at: string): boolean {
+  const r = handle()
+    .prepare("INSERT OR IGNORE INTO waitlist (email, news, token_hash, joined_at) VALUES (?, ?, ?, ?)")
+    .run(email, news ? 1 : 0, tokenHash, at);
+  return Number(r.changes) === 1;
+}
+
+export function leaveWaitlist(tokenHash: string): boolean {
+  return Number(handle().prepare("DELETE FROM waitlist WHERE token_hash = ?").run(tokenHash).changes) === 1;
+}
+
+export function waitlistCount(): number {
+  return Number((handle().prepare("SELECT COUNT(*) AS n FROM waitlist").get() as { n: number }).n);
+}
+
 export function pruneRateEvents(before: number): void {
   handle().prepare("DELETE FROM rate_events WHERE at < ?").run(before);
 }
@@ -970,6 +994,7 @@ export interface Stats {
   pending: number;
   bugs: number;
   feedback: number;
+  waitlist: number;
 }
 
 export function stats(): Stats {
@@ -988,5 +1013,6 @@ export function stats(): Stats {
     pending: one("SELECT COUNT(*) AS n FROM reports WHERE triage_status = 'pending'"),
     bugs: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'bug'"),
     feedback: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'feedback'"),
+    waitlist: waitlistCount(),
   };
 }
