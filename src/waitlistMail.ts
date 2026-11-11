@@ -64,7 +64,8 @@ export function welcomeHtml(leaveUrl: string): string {
           <td><a href="${COMMUNITY}" class="ink edge" style="display:inline-block;padding:9px 17px;border-radius:999px;border:1px solid ${BORDER};color:${TEXT};font:700 14.5px/1.2 ${FONT};text-decoration:none;">Join our server</a></td>
         </tr></table>
       </td></tr></table>
-    <div class="ink" style="margin-top:24px;font:400 15px/1.6 ${FONT};color:${TEXT};">Thanks for signing up,<br>Sivert</div>
+    <div class="ink" style="margin-top:24px;font:400 15px/1.6 ${FONT};color:${TEXT};">Thanks for signing up!</div>
+    <div class="ink-soft" style="margin-top:12px;font:400 15px/1.6 ${FONT};color:${MUTED};">Sivert, who makes Gryt</div>
   </td></tr>
   <tr><td class="ink-soft" style="padding:16px 6px 0;font:400 12.5px/1.5 ${FONT};color:${MUTED};">You got this because this address was entered at gryt.chat/cloud. Didn't sign up, or changed your mind? <a href="${leave}" class="ink-soft" style="color:${MUTED};text-decoration:underline;">Leave the list</a>.</td></tr>
 </table>
