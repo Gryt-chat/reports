@@ -37,7 +37,7 @@ export function welcomeHtml(leaveUrl: string): string {
 </style>
 </head>
 <body class="paper" style="margin:0;padding:0;background:${PAPER};">
-<span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">You'll be the first to know when Gryt Cloud opens, with 50% off your first three months.</span>
+<span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">You'll be the first to know when Gryt Cloud opens, with 50% off your first three months on Friends or Community.</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="paper" style="background:${PAPER};">
 <tr><td align="center" style="padding:36px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
@@ -53,7 +53,7 @@ export function welcomeHtml(leaveUrl: string): string {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;"><tr>
       <td class="offer" style="background:${OFFER};border-radius:14px;padding:14px 16px;">
         <div class="offer-ink" style="font:700 15px/1.4 ${FONT};color:${OFFER_INK};">50% off your first three months</div>
-        <div class="ink-soft" style="margin-top:2px;font:400 14px/1.5 ${FONT};color:${MUTED};">The code comes in the email when it opens.</div>
+        <div class="ink-soft" style="margin-top:2px;font:400 14px/1.5 ${FONT};color:${MUTED};">On Friends or Community. The code comes in the email when it opens.</div>
       </td></tr></table>
     <div class="ink-soft" style="margin-top:20px;font:400 15px/1.6 ${FONT};color:${MUTED};">That's the only email you'll get from us until then.</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;"><tr>
