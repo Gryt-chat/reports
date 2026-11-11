@@ -864,6 +864,10 @@ export function waitlistByPlan(): Record<string, number> {
   return Object.fromEntries(rows.map((r) => [String(r.plan), Number(r.n)]));
 }
 
+export function waitlistNewsCount(): number {
+  return Number((handle().prepare("SELECT COUNT(*) AS n FROM waitlist WHERE news = 1").get() as { n: number }).n);
+}
+
 export function waitlistCount(): number {
   return Number((handle().prepare("SELECT COUNT(*) AS n FROM waitlist").get() as { n: number }).n);
 }
@@ -1003,6 +1007,7 @@ export interface Stats {
   feedback: number;
   waitlist: number;
   waitlistByPlan: Record<string, number>;
+  waitlistNews: number;
 }
 
 export function stats(): Stats {
@@ -1023,5 +1028,6 @@ export function stats(): Stats {
     feedback: one("SELECT COUNT(*) AS n FROM reports WHERE type = 'feedback'"),
     waitlist: waitlistCount(),
     waitlistByPlan: waitlistByPlan(),
+    waitlistNews: waitlistNewsCount(),
   };
 }
