@@ -65,7 +65,14 @@ export function welcomeHtml(leaveUrl: string): string {
         </tr></table>
       </td></tr></table>
     <div class="ink" style="margin-top:24px;font:400 15px/1.6 ${FONT};color:${TEXT};">Thanks for signing up!</div>
-    <div class="ink-soft" style="margin-top:12px;font:400 15px/1.6 ${FONT};color:${MUTED};">Sivert, who makes Gryt</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;"><tr>
+      <td valign="middle" width="44" style="width:44px;padding-right:12px;"><img src="cid:${MARK_CID}" width="44" height="44" alt="Gryt" style="display:block;width:44px;height:44px;border:0;border-radius:999px;"></td>
+      <td valign="middle" class="edge" style="border-left:2px solid ${ACCENT};padding-left:12px;">
+        <div class="ink" style="font:700 15px/1.4 ${FONT};color:${TEXT};">Sivert</div>
+        <div class="ink-soft" style="font:400 13.5px/1.45 ${FONT};color:${MUTED};">Creator of Gryt</div>
+        <div style="font:400 13.5px/1.45 ${FONT};"><a href="https://gryt.chat" class="offer-ink" style="color:${OFFER_INK};text-decoration:underline;">gryt.chat</a></div>
+      </td>
+    </tr></table>
   </td></tr>
   <tr><td class="ink-soft" style="padding:16px 6px 0;font:400 12.5px/1.5 ${FONT};color:${MUTED};">You got this because this address was entered at gryt.chat/cloud. Didn't sign up, or changed your mind? <a href="${leave}" class="ink-soft" style="color:${MUTED};text-decoration:underline;">Leave the list</a>.</td></tr>
 </table>
