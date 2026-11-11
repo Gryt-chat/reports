@@ -39,7 +39,7 @@ export function welcomeMail(to: string, leaveUrl: string): Mail {
       "",
       "You'll be the first to know when Gryt Cloud opens: your own Gryt server, always online, and we run it for you.",
       "",
-      "50% off your first three months. The code comes in the email when it opens.",
+      "50% off your first three months on Friends or Community. The code comes in the email when it opens.",
       "",
       "That's the only email you'll get from us until then.",
       "",
