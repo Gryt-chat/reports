@@ -868,6 +868,13 @@ export function waitlistNewsCount(): number {
   return Number((handle().prepare("SELECT COUNT(*) AS n FROM waitlist WHERE news = 1").get() as { n: number }).n);
 }
 
+export function waitlistJoinedBetween(fromIso: string, toIso: string): number {
+  const row = handle()
+    .prepare("SELECT COUNT(*) AS n FROM waitlist WHERE joined_at >= ? AND joined_at < ?")
+    .get(fromIso, toIso) as { n: number };
+  return Number(row.n);
+}
+
 export function waitlistCount(): number {
   return Number((handle().prepare("SELECT COUNT(*) AS n FROM waitlist").get() as { n: number }).n);
 }
