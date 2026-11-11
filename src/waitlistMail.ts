@@ -69,7 +69,6 @@ export function welcomeHtml(leaveUrl: string): string {
       <td valign="middle" width="44" style="width:44px;padding-right:12px;"><img src="cid:${MARK_CID}" width="44" height="44" alt="Gryt" style="display:block;width:44px;height:44px;border:0;border-radius:999px;"></td>
       <td valign="middle" class="edge" style="border-left:2px solid ${ACCENT};padding-left:12px;">
         <div class="ink" style="font:700 15px/1.4 ${FONT};color:${TEXT};">Sivert</div>
-        <div class="ink-soft" style="font:400 13.5px/1.45 ${FONT};color:${MUTED};">Creator of Gryt</div>
         <div style="font:400 13.5px/1.45 ${FONT};"><a href="https://gryt.chat" class="offer-ink" style="color:${OFFER_INK};text-decoration:underline;">gryt.chat</a></div>
       </td>
     </tr></table>

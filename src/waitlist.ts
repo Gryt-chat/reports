@@ -50,7 +50,6 @@ export function welcomeMail(to: string, leaveUrl: string): Mail {
       "Thanks for signing up!",
       "",
       "Sivert",
-      "Creator of Gryt",
       "https://gryt.chat",
       "",
       `You got this because this address was entered at gryt.chat/cloud. Didn't sign up, or changed your mind? Leave the list: ${leaveUrl}`,
