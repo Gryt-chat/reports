@@ -17,6 +17,7 @@ export interface Week {
   totalFeedback: number;
   /** Which app they arrived from, most first. All time. */
   byApp: { app: string; count: number }[];
+  waitlist: { total: number; thisWeek: number; news: number; byPlan: Record<string, number> };
 }
 
 /** @gryt/ui, light. */
@@ -61,6 +62,46 @@ const APP_NAMES: Record<string, string> = {
 
 export function appName(app: string): string {
   return APP_NAMES[app] ?? app.charAt(0).toUpperCase() + app.slice(1);
+}
+
+const PLANS: [string, string][] = [
+  ["friends", "Friends"],
+  ["community", "Community"],
+  ["large", "Large"],
+  ["none", "No plan picked"],
+];
+
+function plansOf(byPlan: Record<string, number>): [string, number][] {
+  return PLANS.filter(([id]) => byPlan[id]).map(([id, name]) => [name, byPlan[id]]);
+}
+
+function waitlistCard(w: Week["waitlist"]): string {
+  const plans = plansOf(w.byPlan)
+    .map(
+      ([name, n]) => `<tr>
+        <td class="ink" style="padding:7px 0;font:400 14px/1.4 ${FONT};color:${TEXT};">${esc(name)}</td>
+        <td align="right" class="ink" style="padding:7px 0;font:700 14px/1.4 ${FONT};color:${TEXT};">${n}</td>
+      </tr>`,
+    )
+    .join("");
+  return `<tr><td class="surface edge" style="background:${SURFACE};border:1px solid ${BORDER};border-radius:${R_LG};padding:24px 28px;">
+    <div class="ink" style="font:700 15px/1.4 ${FONT};color:${TEXT};">Gryt Cloud waitlist</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:2px;">
+      ${row(w.total, w.total === 1 ? "person on the list" : "people on the list", false)}
+      ${row(w.thisWeek, "joined this week", false)}
+      ${row(w.news, "want the newsletter", true)}
+    </table>
+    ${
+      plans
+        ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+      <tr><td colspan="2" class="ink-soft edge" style="border-top:1px solid ${BORDER};padding:14px 0 4px 0;font:400 13px/1.5 ${FONT};color:${MUTED};">By the plan they asked about</td></tr>
+      ${plans}
+    </table>`
+        : ""
+    }
+  </td></tr>
+
+  <tr><td height="12" style="height:12px;font-size:0;line-height:12px;">&nbsp;</td></tr>`;
 }
 
 /** The content id the mark is attached under. See `digest.ts`. */
@@ -175,6 +216,9 @@ export function render(week: Week, publicUrl: string | null): {
     ...(week.byApp.length
       ? ["Where they come from:", ...week.byApp.map((a) => `  ${appName(a.app)}: ${a.count}`), ""]
       : []),
+    `Gryt Cloud waitlist: ${week.waitlist.total} (${week.waitlist.thisWeek} this week, ${week.waitlist.news} want the newsletter)`,
+    ...plansOf(week.waitlist.byPlan).map(([name, n]) => `  ${name}: ${n}`),
+    "",
     week.openNow === 0
       ? "Nothing is waiting in the inbox."
       : `${week.openNow} still open in the inbox, counting every week.`,
@@ -260,6 +304,8 @@ export function render(week: Week, publicUrl: string | null): {
   <tr><td height="12" style="height:12px;font-size:0;line-height:12px;">&nbsp;</td></tr>`
       : ""
   }
+
+  ${waitlistCard(week.waitlist)}
 
   <!-- What is still waiting. The only part of this you can act on. -->
   <tr><td class="raised edge" style="background:${SURFACE_RAISED};border:1px solid ${BORDER};border-radius:${R_LG};padding:22px 28px;">

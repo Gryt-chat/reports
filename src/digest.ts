@@ -13,6 +13,10 @@ import {
   recordDigest,
   totalsByApp,
   totalsByType,
+  waitlistByPlan,
+  waitlistCount,
+  waitlistJoinedBetween,
+  waitlistNewsCount,
 } from "./db.ts";
 import { MARK_CID, render, type Week } from "./digestMail.ts";
 
@@ -59,6 +63,12 @@ export function weekFor(now: Date): Week {
     openNow: countReports({ shelf: "open" }),
     ...totalsByTypeNamed(),
     byApp: totalsByApp(),
+    waitlist: {
+      total: waitlistCount(),
+      thisWeek: waitlistJoinedBetween(from, to),
+      news: waitlistNewsCount(),
+      byPlan: waitlistByPlan(),
+    },
   };
 }
 
@@ -194,5 +204,6 @@ export function sampleWeek(now = new Date()): Week {
       { app: "web", count: 66 },
       { app: "cli", count: 14 },
     ],
+    waitlist: { total: 37, thisWeek: 12, news: 9, byPlan: { community: 18, friends: 11, large: 3, none: 5 } },
   };
 }

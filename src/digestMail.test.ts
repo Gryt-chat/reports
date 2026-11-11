@@ -16,6 +16,7 @@ const week = (over: Partial<Week> = {}): Week => ({
     { app: "mobile", count: 14 },
     { app: "web", count: 5 },
   ],
+  waitlist: { total: 0, thisWeek: 0, news: 0, byPlan: {} },
   ...over,
 });
 
@@ -147,4 +148,14 @@ test("the all-time totals are stated separately from the week's", () => {
   const html = render(week({ bug: 5, feedback: 2, totalBug: 31, totalFeedback: 12 }), null).html;
   assert.match(html, /7<\/span>[\s\S]{0,200}this week/);
   assert.match(html, /31 bugs and 12 feedback all told/);
+});
+
+test("the digest counts the Cloud waitlist, by plan", () => {
+  const out = render(week({ waitlist: { total: 7, thisWeek: 3, news: 2, byPlan: { community: 4, none: 3 } } }), null);
+  assert.match(out.text, /Gryt Cloud waitlist: 7 \(3 this week, 2 want the newsletter\)/);
+  assert.match(out.text, /Community: 4/);
+  assert.match(out.text, /No plan picked: 3/);
+  assert.doesNotMatch(out.text, /Friends:/);
+  assert.match(out.html, /Gryt Cloud waitlist/);
+  assert.match(out.html, />joined this week</);
 });
