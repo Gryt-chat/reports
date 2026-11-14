@@ -29,6 +29,7 @@ import { notify } from "./notify.ts";
 import { oidcFrom, type OidcConfig } from "./oidc.ts";
 import { newReportId, normaliseReport } from "./report.ts";
 import { scrubOldIdentifiers } from "./retention.ts";
+import { TestflightPoller } from "./testflight.ts";
 import { Triager } from "./triage.ts";
 import { giveUnknownApps, takeUnknownApps } from "./unknownApps.ts";
 import { join, leave, smtpSender, type SendMail } from "./waitlist.ts";
@@ -44,6 +45,15 @@ async function main(): Promise<void> {
 
   const digest = new Digest(config);
   digest.start();
+
+  const testflight = new TestflightPoller(config, (id) => {
+    if (config.notifyOn === "receive") {
+      const stored = getReport(id);
+      if (stored) void notify(config, stored);
+    }
+    void triager.tick();
+  });
+  testflight.start();
 
   const oidc = oidcFrom(config);
   const dashboard = new Dashboard(config.uiDir);
@@ -90,6 +100,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: string): void => {
     consola.info(`[reports] ${signal}, shutting down`);
     triager.stop();
+    testflight.stop();
     server.close(() => {
       closeDb();
       process.exit(0);
