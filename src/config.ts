@@ -1,5 +1,7 @@
 import consola from "consola";
 
+import type { AscConfig } from "./testflight.ts";
+
 /**
  * Everything this service reads from the environment, resolved once at boot. The defaults
  * suit the real deployment, not a first run: an open POST endpoint is the failure mode.
@@ -128,6 +130,8 @@ export interface Config {
   notifyOn: "receive" | "triage" | "never";
   /** Where the admin inbox lives, for the links in a notification. */
   publicUrl: string | null;
+  /** App Store Connect, for pulling TestFlight feedback. Null leaves it off. */
+  asc: AscConfig | null;
 }
 
 function int(name: string, fallback: number, min: number, max: number): number {
@@ -314,5 +318,15 @@ export function loadConfig(): Config {
     grytWebhookUrl: process.env.REPORTS_GRYT_WEBHOOK_URL?.trim() || null,
     notifyOn: (process.env.REPORTS_NOTIFY_ON as Config["notifyOn"]) || "triage",
     publicUrl: process.env.REPORTS_PUBLIC_URL?.trim().replace(/\/$/, "") || null,
+    asc: ascFrom(),
   };
+}
+
+function ascFrom(): AscConfig | null {
+  const keyId = process.env.REPORTS_ASC_KEY_ID?.trim();
+  const issuerId = process.env.REPORTS_ASC_ISSUER_ID?.trim();
+  const keyPath = process.env.REPORTS_ASC_KEY_PATH?.trim();
+  const appId = process.env.REPORTS_ASC_APP_ID?.trim();
+  if (!keyId || !issuerId || !keyPath || !appId) return null;
+  return { keyId, issuerId, keyPath, appId, pollMinutes: int("REPORTS_ASC_POLL_MINUTES", 15, 5, 1440) };
 }
