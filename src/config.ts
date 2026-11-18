@@ -241,7 +241,7 @@ export function loadConfig(): Config {
 
     maxBodyBytes: int("REPORTS_MAX_BODY_BYTES", 256 * 1024, 4096, 4 * 1024 * 1024),
     maxMessageChars: int("REPORTS_MAX_MESSAGE_CHARS", 8000, 200, 100_000),
-    maxLogLines: int("REPORTS_MAX_LOG_LINES", 200, 0, 2000),
+    maxLogLines: int("REPORTS_MAX_LOG_LINES", 1000, 0, 2000),
     maxLogLineChars: int("REPORTS_MAX_LOG_LINE_CHARS", 500, 80, 4000),
     maxExtraChars: int("REPORTS_MAX_EXTRA_CHARS", 8000, 0, 100_000),
 
