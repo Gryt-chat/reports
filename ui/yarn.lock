@@ -358,20 +358,28 @@
   resolved "https://registry.yarnpkg.com/@fontsource-variable/jetbrains-mono/-/jetbrains-mono-5.3.0.tgz#5738dedd3af40606b0d9b7626f4ba7c4586cb39b"
   integrity sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==
 
-"@gryt/theme@^0.5.0":
-  version "0.5.0"
-  resolved "https://registry.yarnpkg.com/@gryt/theme/-/theme-0.5.0.tgz#21900346ec7c30e0aaba8024c2efa90fa319bb1a"
-  integrity sha512-n0EEsN23s1Pzab/blV854vbwIleJlQNQp2Pq+BrKHTfolhnCsoEUVRJ9aXBknbt7Q0CFEbF0J3FkGox/Ds5bYg==
+"@gryt/owl@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@gryt/owl/-/owl-0.8.0.tgz#ee3c0ee94d6ff49ea4e9f13e6847e512b02766c0"
+  integrity sha512-lG7AjDiTQtPJ7RQmF+g82uENRTnUU5PVxcnF56l83oALfLnksI5kV9Dl1knlT9eecD1aHIZfAsfaqXsDtjFbvw==
 
-"@gryt/ui@^0.17.1":
-  version "0.17.1"
-  resolved "https://registry.yarnpkg.com/@gryt/ui/-/ui-0.17.1.tgz#d14a0ca928386d0a24631a267c1d772b0526529b"
-  integrity sha512-wDMk6oNuCgb8WcPPAnCsq3xh6S34/moVOwym88WcUUX2yfPwL3b0lKEs3wXVZpmfg5+m/cEE4WM8PN9/mmo4fw==
+"@gryt/theme@^0.13.0":
+  version "0.13.0"
+  resolved "https://registry.yarnpkg.com/@gryt/theme/-/theme-0.13.0.tgz#640f3049b53cfe427f0067cfc5faeffbd04d36aa"
+  integrity sha512-7CW/wBKZFL1bfk5xQcJtvdoD+rbCvmHeA0U2uTQMQ9gfXAvIbPx7GL+TjMYYouTtLdJ/OKFARK+NXuS0RaBveg==
+
+"@gryt/ui@^0.53.0":
+  version "0.53.0"
+  resolved "https://registry.yarnpkg.com/@gryt/ui/-/ui-0.53.0.tgz#3652f14a8595a8bdebdd694f49874bfc1161ee7d"
+  integrity sha512-owZKhahz7cPdBY6tOF1kFgLWt5Ie0CofiEO1l//vu49y9U71s7fYJqnn6KVmiTLhR+GmZbp1bAi+7EoMZkLXtw==
   dependencies:
     "@base-ui/react" "^1.7.0"
-    "@gryt/theme" "^0.5.0"
+    "@gryt/owl" "^0.8.0"
+    "@gryt/theme" "^0.13.0"
     "@phosphor-icons/react" "^2.1.10"
+    "@tanstack/react-virtual" "^3.13.12"
     clsx "^2.1.1"
+    gemoji "^8.1.0"
     tailwind-merge "^3.4.0"
 
 "@jridgewell/gen-mapping@^0.3.12", "@jridgewell/gen-mapping@^0.3.5":
@@ -548,6 +556,18 @@
   resolved "https://registry.yarnpkg.com/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.62.5.tgz#441b89b848ba51cbf259621c6f554e268d169b6a"
   integrity sha512-/gDJaRs4gl0NPIwqCz+6PkpmhhjRAD2j6P4rSNHBzUkO3naEx2mIU0pRle1vUNRQ7mE/+8OOeXLTv/J56FKiQg==
 
+"@tanstack/react-virtual@^3.13.12":
+  version "3.14.26"
+  resolved "https://registry.yarnpkg.com/@tanstack/react-virtual/-/react-virtual-3.14.26.tgz#30efd2d54dfa7165b59657abfef39312d3de2402"
+  integrity sha512-HUDlfsrYH6ko5xH56L62Mcl/uzT+AGVNMHFuDNqDJMdZWc1AQa2oeVKNUvZ/RWBZQ4TYtyQerFrNvLnp39h65A==
+  dependencies:
+    "@tanstack/virtual-core" "3.19.11"
+
+"@tanstack/virtual-core@3.19.11":
+  version "3.19.11"
+  resolved "https://registry.yarnpkg.com/@tanstack/virtual-core/-/virtual-core-3.19.11.tgz#089fd1a9a92503f8f2329c7e48ceb84178726fc1"
+  integrity sha512-/5iHb0RHBvj8Di59FDs4ESNm45jls33aZAi4zccVXZjc/6ZvwQP6nzEYeT6weXjTf9E6/vrp2JhYWRyO+ZP13A==
+
 "@types/babel__core@^7.20.5":
   version "7.20.5"
   resolved "https://registry.yarnpkg.com/@types/babel__core/-/babel__core-7.20.5.tgz#3df15f27ba85319caa07ba08d0721889bb39c017"
@@ -716,6 +736,11 @@ fsevents@~2.3.2, fsevents@~2.3.3:
   version "2.3.3"
   resolved "https://registry.yarnpkg.com/fsevents/-/fsevents-2.3.3.tgz#cac6407785d03675a2a5e1a5305c697b347d90d6"
   integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
+
+gemoji@^8.1.0:
+  version "8.1.0"
+  resolved "https://registry.yarnpkg.com/gemoji/-/gemoji-8.1.0.tgz#3d47a26e569c51efa95198822a6f483d7a7ae600"
+  integrity sha512-HA4Gx59dw2+tn+UAa7XEV4ufUKI4fH1KgcbenVA9YKSj1QJTT0xh5Mwv5HMFNN3l2OtUe3ZIfuRwSyZS5pLIWw==
 
 gensync@^1.0.0-beta.2:
   version "1.0.0-beta.2"
